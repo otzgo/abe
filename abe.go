@@ -19,6 +19,8 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
 )
 
@@ -353,6 +355,18 @@ func (e *Engine) mountControllers(basePath string) {
 		}
 
 		routerGroup := e.router.Group(basePath, e.middlewares.getGlobals()...)
+
+		if e.config.GetBool("swagger.enabled") {
+			var opts []func(*ginSwagger.Config)
+			if url := e.config.GetString("swagger.url"); url != "" {
+				opts = append(opts, ginSwagger.URL(url))
+			}
+			if name := e.config.GetString("swagger.instance"); name != "" {
+				opts = append(opts, ginSwagger.InstanceName(name))
+			}
+			routerGroup.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, opts...))
+		}
+
 		for _, provider := range snapshot {
 			ctrl := provider()
 			func() {
