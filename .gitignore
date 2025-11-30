@@ -82,7 +82,6 @@ tmp/
 .task/
 
 # GoReleaser
-dist/
 *.tar.gz
 *.zip
 *.deb
