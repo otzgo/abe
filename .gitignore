@@ -1,0 +1,120 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Build output
+/bin/
+/dist/
+/build/
+*.o
+*.a
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+
+# IDE - JetBrains (GoLand, IntelliJ IDEA)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE - Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+.DS_Store?
+Thumb.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.~lock.*
+
+# Configuration files (if containing sensitive data)
+# config.local.yaml
+# config.dev.yaml
+
+# Debug files
+__debug_bin
+__debug_bin.exe
+debug
+debug.test
+
+# Air (live reload)
+tmp/
+
+# Task runner output
+.task/
+
+# GoReleaser
+dist/
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.apk
+
+# Wire generated files (optional, uncomment if you want to regenerate on each build)
+# wire_gen.go
+
+# Coverage reports
+coverage.txt
+coverage.html
+*.cover
+*.coverprofile
+
+# Profiling data
+*.prof
+*.pprof
+cpu.out
+mem.out
+
+# Database files (for local development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+
+# Documentation build output
+/docs/_build/
+/docs/site/
