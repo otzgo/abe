@@ -42,6 +42,7 @@ func InitializeEngine() *Engine {
 	enforcer := newEnforcer(db, logger, viper)
 	validator := newValidator(viper)
 	middlewareManager := newMiddlewareManager()
+	bundle := newI18nBundle(viper, logger)
 	abeEngine := &Engine{
 		config:      viper,
 		router:      engine,
@@ -53,6 +54,7 @@ func InitializeEngine() *Engine {
 		enforcer:    enforcer,
 		validator:   validator,
 		middlewares: middlewareManager,
+		i18nBundle:  bundle,
 	}
 	return abeEngine
 }

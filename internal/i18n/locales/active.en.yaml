@@ -1,0 +1,34 @@
+# abe framework built-in translations (English)
+# These messages provide default error messages and common prompts for the framework
+
+# Authentication errors
+auth.missing_header:
+  other: "No authentication information provided"
+auth.invalid_format:
+  other: "Invalid authentication header format, should be 'Bearer {token}'"
+auth.token_expired:
+  other: "Token has expired"
+auth.invalid_token:
+  other: "Invalid token"
+auth.processing_failed:
+  other: "Authentication processing failed"
+
+# Authorization errors
+auth.missing_role:
+  other: "Missing primary role"
+auth.unauthorized:
+  other: "Unauthorized user"
+auth.forbidden:
+  other: "Insufficient permissions to access this resource"
+
+# Validation errors
+validation.failed:
+  other: "Input validation failed"
+
+# Internal errors
+internal.error:
+  other: "Internal server error"
+internal.config_parse_failed:
+  other: "Failed to parse configuration"
+internal.jwt_secret_missing:
+  other: "JWT secret not configured"

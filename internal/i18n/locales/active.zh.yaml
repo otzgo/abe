@@ -1,0 +1,34 @@
+# abe 框架内置翻译（简体中文）
+# 这些消息提供框架的默认错误消息和通用提示
+
+# 认证错误
+auth.missing_header:
+  other: "未提供认证信息"
+auth.invalid_format:
+  other: "认证头格式错误，应为 'Bearer {token}'"
+auth.token_expired:
+  other: "令牌已过期"
+auth.invalid_token:
+  other: "无效令牌"
+auth.processing_failed:
+  other: "认证处理失败"
+
+# 授权错误
+auth.missing_role:
+  other: "缺少主角色"
+auth.unauthorized:
+  other: "未认证的用户"
+auth.forbidden:
+  other: "权限不足，无法访问此资源"
+
+# 验证错误
+validation.failed:
+  other: "输入验证失败"
+
+# 内部错误
+internal.error:
+  other: "内部服务器错误"
+internal.config_parse_failed:
+  other: "解析认证配置失败"
+internal.jwt_secret_missing:
+  other: "JWT 密钥未配置"

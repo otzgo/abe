@@ -33,7 +33,7 @@ func InitializeEngine() *Engine {
 		wire.Struct(
 			new(Engine),
 			"config", "router", "db", "cron", "events", "pool",
-			"logger", "enforcer", "validator", "middlewares",
+			"logger", "enforcer", "validator", "middlewares", "i18nBundle",
 		),
 		newCron,
 		newConfig,
@@ -47,6 +47,7 @@ func InitializeEngine() *Engine {
 		newPool,
 		newValidator,
 		newMiddlewareManager,
+		newI18nBundle,
 		wire.Bind(new(EventBus), new(*goChannelBus)),
 	)
 	return nil

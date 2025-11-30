@@ -15,6 +15,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
@@ -36,6 +37,7 @@ type Engine struct {
 	enforcer    *casbin.Enforcer
 	validator   *Validator
 	middlewares *MiddlewareManager
+	i18nBundle  *i18n.Bundle
 
 	basePath string // 路由基础路径
 
