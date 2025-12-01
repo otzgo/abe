@@ -35,7 +35,7 @@ func InitializeEngine() *Engine {
 	engine := newRouter(viper, logger)
 	db := newDB(viper)
 	cron := newCron(logger)
-	config := newGoChannelConfig()
+	config := newGoChannelConfig(viper)
 	loggerAdapter := newGoChannelLogger(logger)
 	abeGoChannelBus := newGoChannelBus(config, loggerAdapter)
 	pool := newPool(viper, logger)

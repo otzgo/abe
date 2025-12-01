@@ -2,84 +2,58 @@ package abe
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
-	"sync"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"github.com/spf13/viper"
 )
 
-// PublishEvent 发布事件。
-func PublishEvent[T any](bus EventBus, topic string, event T) error {
-	// 这里使用 context.Background() 作为默认上下文。
-	ctx := context.Background()
-	return publish(ctx, bus, topic, event, JSONCodec[T]{})
+// EventMessage 消息结构体
+type EventMessage struct {
+	msg *message.Message
 }
 
-// SubscribeEvent 订阅事件。
-func SubscribeEvent[T any](ctx context.Context, bus EventBus, topic string, handler func(context.Context, T) error, opts ...SubscribeOption) (*Subscription, error) {
-	return subscribe(ctx, bus, topic, JSONCodec[T]{}, handler, opts...)
+// NewMessage 创建一个新的 EventMessage 实例。
+func NewMessage(payload []byte) *EventMessage {
+	return &EventMessage{msg: message.NewMessage(watermill.NewUUID(), payload)}
 }
 
-// Codec 为事件编解码抽象，通过泛型保证类型安全。
-// 用户可自定义实现（如 JSON / MsgPack / Protobuf）。
-type Codec[T any] interface {
-	Encode(T) ([]byte, error)
-	Decode([]byte) (T, error)
+// Payload 返回消息的有效载荷（Payload）。
+func (m *EventMessage) Payload() []byte {
+	return m.msg.Payload
 }
 
-// JSONCodec 默认的 JSON 编解码器。
-type JSONCodec[T any] struct{}
-
-func (c JSONCodec[T]) Encode(v T) ([]byte, error) {
-	return json.Marshal(v)
+// Ack 确认消息，用于成功处理消息。
+func (m *EventMessage) Ack() bool {
+	return m.msg.Ack()
 }
 
-func (c JSONCodec[T]) Decode(b []byte) (T, error) {
-	var v T
-	err := json.Unmarshal(b, &v)
-	return v, err
+// Acked 确认通道，当消息被成功处理时关闭。
+func (m *EventMessage) Acked() <-chan struct{} {
+	return m.msg.Acked()
 }
 
-// Subscription 表示一次订阅，可用于取消订阅与等待处理结束。
-type Subscription struct {
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+// Nack 负确认消息，用于拒绝处理消息。
+func (m *EventMessage) Nack() bool {
+	return m.msg.Nack()
 }
 
-// Unsubscribe 取消订阅并等待内部处理退出。
-func (s *Subscription) Unsubscribe() {
-	if s == nil {
-		return
-	}
-	s.cancel()
-	s.wg.Wait()
+// Nacked 负确认通道，当消息被拒绝时关闭。
+func (m *EventMessage) Nacked() <-chan struct{} {
+	return m.msg.Nacked()
 }
 
-// SubscribeOption 订阅配置项。
-type SubscribeOption func(*subscribeConfig)
-
-type subscribeConfig struct {
-	concurrency int // 处理并发度（消费协程数）
-}
-
-// WithConcurrency 设置订阅处理并发度，默认为 1。
-func WithConcurrency(n int) SubscribeOption {
-	return func(c *subscribeConfig) {
-		if n <= 0 {
-			n = 1
-		}
-		c.concurrency = n
-	}
+func (m *EventMessage) UUID() string {
+	return m.msg.UUID
 }
 
 // EventBus 为事件总线的抽象接口，按消息层面暴露能力。
 // 通过泛型辅助函数提供类型安全的 publish/subscribe。
 type EventBus interface {
-	Publish(ctx context.Context, topic string, msg *message.Message) error
-	Subscribe(ctx context.Context, topic string, handler func(context.Context, *message.Message) error, opts ...SubscribeOption) (*Subscription, error)
+	Publish(topic string, messages ...*EventMessage) error
+	Subscribe(ctx context.Context, topic string) (<-chan *EventMessage, error)
 	Close() error
 }
 
@@ -103,9 +77,17 @@ func newGoChannelBus(cfg *gochannel.Config, logger watermill.LoggerAdapter) *goC
 	return &goChannelBus{ps: ps, logger: logger}
 }
 
-func newGoChannelConfig() *gochannel.Config {
+func newGoChannelConfig(config *viper.Viper) *gochannel.Config {
+	// 从配置读取缓冲大小，优先级：环境变量/CLI Flag/配置文件 > 默认值
+	var buf int64 = 0
+	if config != nil {
+		buf = int64(config.GetInt("event.output_buffer"))
+	}
+	if buf <= 0 {
+		buf = 64
+	}
 	return &gochannel.Config{
-		OutputChannelBuffer: 10,
+		OutputChannelBuffer: buf,
 	}
 }
 
@@ -114,83 +96,36 @@ func newGoChannelLogger(logger *slog.Logger) watermill.LoggerAdapter {
 }
 
 // Publish 发布原始消息。
-func (b *goChannelBus) Publish(_ context.Context, topic string, msg *message.Message) error {
+func (b *goChannelBus) Publish(topic string, msg ...*EventMessage) error {
 	// GoChannel Publisher 不使用 ctx，这里直接发布。
-	return b.ps.Publish(topic, msg)
+	// 将 EventMessage 转换为 message.Message
+	msgWatermill := make([]*message.Message, len(msg))
+	for i, m := range msg {
+		msgWatermill[i] = m.msg
+	}
+	return b.ps.Publish(topic, msgWatermill...)
 }
 
-// Subscribe 订阅原始消息并按并发度处理。
-func (b *goChannelBus) Subscribe(ctx context.Context, topic string, handler func(context.Context, *message.Message) error, opts ...SubscribeOption) (*Subscription, error) {
-	cfg := &subscribeConfig{concurrency: 1}
-	for _, o := range opts {
-		o(cfg)
-	}
-
-	// 每个订阅都有独立可取消的上下文，便于 Unsubscribe。
-	ctxSub, cancel := context.WithCancel(ctx)
-	ch, err := b.ps.Subscribe(ctxSub, topic)
+// Subscribe 订阅原始消息（单协程处理）。
+func (b *goChannelBus) Subscribe(ctx context.Context, topic string) (<-chan *EventMessage, error) {
+	ch, err := b.ps.Subscribe(ctx, topic)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
-
-	s := &Subscription{cancel: cancel}
-	if cfg.concurrency <= 0 {
-		cfg.concurrency = 1
-	}
-
-	// 启动并发处理协程。
-	for i := 0; i < cfg.concurrency; i++ {
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			for {
-				select {
-				case <-ctxSub.Done():
-					return
-				case msg, ok := <-ch:
-					if !ok {
-						return
-					}
-					if err := handler(ctxSub, msg); err != nil {
-						// 处理失败，尝试 Nack（GoChannel 的 Nack 语义为简单重投或忽略，视实现而定）
-						msg.Nack()
-					} else {
-						msg.Ack()
-					}
-				}
-			}
-		}()
-	}
-
-	return s, nil
+	// 将 message.Message 转换为 EventMessage
+	msgCh := make(chan *EventMessage)
+	go func() {
+		defer close(msgCh)
+		for msg := range ch {
+			msgCh <- &EventMessage{msg: msg}
+		}
+	}()
+	return msgCh, nil
 }
 
 // Close 关闭底层 Pub/Sub。
 func (b *goChannelBus) Close() error {
 	return b.ps.Close()
-}
-
-// publish 泛型辅助：类型安全的事件发布。
-func publish[T any](ctx context.Context, bus EventBus, topic string, event T, codec Codec[T]) error {
-	payload, err := codec.Encode(event)
-	if err != nil {
-		return err
-	}
-	msg := message.NewMessage(watermill.NewUUID(), payload)
-	return bus.Publish(ctx, topic, msg)
-}
-
-// subscribe 泛型辅助：类型安全的事件订阅。
-func subscribe[T any](ctx context.Context, bus EventBus, topic string, codec Codec[T], handler func(context.Context, T) error, opts ...SubscribeOption) (*Subscription, error) {
-	wrap := func(ctx context.Context, msg *message.Message) error {
-		v, err := codec.Decode(msg.Payload)
-		if err != nil {
-			return err
-		}
-		return handler(ctx, v)
-	}
-	return bus.Subscribe(ctx, topic, wrap, opts...)
 }
 
 // slogAdapter 将 slog.Logger 适配为 Watermill 的 LoggerAdapter。
