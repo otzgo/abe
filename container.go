@@ -15,9 +15,10 @@ func ContainerMiddleware(engine *Engine) gin.HandlerFunc {
 		inj := do.New()
 
 		// 框架级依赖注册（单例值）
+		do.ProvideValue(inj, engine)            // *Engine
 		do.ProvideValue(inj, engine.Config())   // *viper.Viper
 		do.ProvideValue(inj, engine.Logger())   // *slog.Logger
-		do.ProvideValue(inj, engine.Db())       // *gorm.DB
+		do.ProvideValue(inj, engine.DB())       // *gorm.DB
 		do.ProvideValue(inj, engine.EventBus()) // EventBus
 		do.ProvideValue(inj, engine.Pool())     // *ants.Pool
 		do.ProvideValue(inj, engine.enforcer)   // *casbin.Enforcer
@@ -39,4 +40,18 @@ func ContainerMiddleware(engine *Engine) gin.HandlerFunc {
 func Injector(ctx *gin.Context) do.Injector {
 	v := ctx.MustGet(doInjectorKey)
 	return v.(do.Injector)
+}
+
+// Invoke 从 DI 容器中获取指定的 UseCase 实例，并执行其 Handle 方法。
+//
+// 参数:
+//   - ctx: *gin.Context，当前请求的上下文，用于获取 DI 容器。
+//
+// 返回:
+//   - R: UseCase 处理函数的返回值类型。
+//   - error: 处理过程中遇到的错误，若成功则为 nil。
+func Invoke[T UseCase[R], R any](ctx *gin.Context) (R, error) {
+	inj := Injector(ctx)
+	useCase := do.MustInvokeStruct[T](inj)
+	return useCase.Handle(ctx)
 }

@@ -82,8 +82,8 @@ func (e *Engine) Router() *gin.Engine {
 	return e.router
 }
 
-// Db 数据库引擎
-func (e *Engine) Db() *gorm.DB {
+// DB 数据库引擎
+func (e *Engine) DB() *gorm.DB {
 	return e.db
 }
 
@@ -377,7 +377,7 @@ func (e *Engine) mountControllers(basePath string) {
 						}
 					}
 				}()
-				ctrl.RegisterRoutes(routerGroup)
+				ctrl.RegisterRoutes(routerGroup, e.middlewares)
 			}()
 		}
 
