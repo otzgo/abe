@@ -2,8 +2,7 @@ package abe
 
 import (
 	"errors"
-	"net/http"
-	"strings"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -59,46 +58,6 @@ type AuthConfig struct {
 	RefreshExpiry    int      `mapstructure:"refresh_expiry"`
 }
 
-// AuthenticationMiddleware 身份认证中间件：
-// - 提取 Authorization: Bearer {token}
-// - 校验 JWT
-// - 将 UserClaims 写入上下文
-// - 出错时通过 ErrorHandlerMiddleware 统一响应
-func AuthenticationMiddleware(engine *Engine) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		authHeader := ctx.GetHeader("Authorization")
-		if authHeader == "" {
-			ctx.Error(&HTTPError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: "未提供认证信息", Details: []ErrorDetail{AuthDetail("missing Authorization header")}})
-			ctx.Abort()
-			return
-		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			ctx.Error(&HTTPError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: "认证头格式错误，应为 'Bearer {token}'", Details: []ErrorDetail{AuthDetail("invalid auth header format")}})
-			ctx.Abort()
-			return
-		}
-
-		claims, err := engine.ParseToken(parts[1])
-		if err != nil {
-			switch {
-			case errors.Is(err, ErrTokenExpired):
-				ctx.Error(&HTTPError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: "令牌已过期", Details: []ErrorDetail{AuthDetail("token expired")}})
-			case errors.Is(err, ErrInvalidToken), errors.Is(err, ErrInvalidSigningKey):
-				ctx.Error(&HTTPError{Status: http.StatusUnauthorized, Code: CodeUnauthorized, Message: "无效令牌", Details: []ErrorDetail{AuthDetail("invalid token")}})
-			default:
-				ctx.Error(&HTTPError{Status: http.StatusInternalServerError, Code: CodeInternalServerError, Message: "认证处理失败", Details: []ErrorDetail{AuthDetail(err.Error())}})
-			}
-			ctx.Abort()
-			return
-		}
-
-		ctx.Set(contextKeyUserClaims, claims)
-		ctx.Next()
-	}
-}
-
 // GetUserClaims 从上下文中获取用户声明
 func GetUserClaims(ctx *gin.Context) (*UserClaims, bool) {
 	v, ok := ctx.Get(contextKeyUserClaims)
@@ -107,4 +66,39 @@ func GetUserClaims(ctx *gin.Context) (*UserClaims, bool) {
 	}
 	claims, ok := v.(*UserClaims)
 	return claims, ok
+}
+
+// AuthorizationOption 权限中间件选项
+type AuthorizationOption func(*authorizationConfig)
+
+// authorizationConfig 权限中间件配置
+type authorizationConfig struct {
+	objectPrefix string
+}
+
+// WithObjectPrefix 设置对象前缀
+// obj 允许使用前缀模式："prefix" 或 "*"，当非 * 时将拼接请求路径
+func WithObjectPrefix(prefix string) AuthorizationOption {
+	return func(cfg *authorizationConfig) {
+		cfg.objectPrefix = prefix
+	}
+}
+
+// getUserClaimsOrAbort 获取用户声明，失败时中止请求
+func getUserClaimsOrAbort(ctx *gin.Context) (*UserClaims, bool) {
+	claims, ok := GetUserClaims(ctx)
+	if !ok {
+		ctx.Error(fmt.Errorf("未认证的用户: %w", ErrUnauthorized))
+		ctx.Abort()
+		return nil, false
+	}
+	return claims, true
+}
+
+// buildObject 根据前缀和请求构建对象路径
+func buildObject(objectPrefix string, ctx *gin.Context) string {
+	if objectPrefix == "*" {
+		return objectPrefix
+	}
+	return objectPrefix + ctx.Request.URL.Path
 }

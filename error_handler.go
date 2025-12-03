@@ -1,178 +1,292 @@
 package abe
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"maps"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	"gorm.io/gorm"
 )
 
-// ErrorCode 业务错误码类型
-// 建议业务侧使用自定义区间，并与 HTTP 状态语义配合
-// 例如：
-//   - 400xx 参数/校验错误
-//   - 401xx 认证错误
-//   - 403xx 授权错误
-//   - 429xx 限流错误
-//   - 500xx 服务端错误
+// ErrorCode 业务错误码类型（与 HTTP 状态码解耦）
+// 编码规则：
+//   - 1xxx: 输入验证类错误
+//   - 2xxx: 认证授权类错误
+//   - 3xxx: 资源操作类错误
+//   - 4xxx: 系统限制类错误
+//   - 5xxx: 服务端错误
+//   - 6xxx: 外部依赖错误
+//   - 9xxx: 业务逻辑错误（预留）
 type ErrorCode int
 
 const (
-	CodeBadRequest          ErrorCode = 40001
-	CodeUnauthorized        ErrorCode = 40101
-	CodeForbidden           ErrorCode = 40301
-	CodeTooManyRequests     ErrorCode = 42901
-	CodeInternalServerError ErrorCode = 50001
+	CodeValidationFailed ErrorCode = 1001 // 参数验证失败
+	CodeInvalidJSON      ErrorCode = 1002 // JSON 格式错误
+	CodeInvalidFormat    ErrorCode = 1003 // 数据格式错误
+
+	CodeUnauthorized     ErrorCode = 2001 // 未认证
+	CodeTokenExpired     ErrorCode = 2002 // 令牌过期
+	CodeTokenInvalid     ErrorCode = 2003 // 令牌无效
+	CodeForbidden        ErrorCode = 2101 // 无权限
+	CodeInsufficientPerm ErrorCode = 2102 // 权限不足
+
+	CodeNotFound         ErrorCode = 3001 // 资源不存在
+	CodeAlreadyExists    ErrorCode = 3002 // 资源已存在
+	CodeConflict         ErrorCode = 3003 // 资源冲突
+	CodeResourceGone     ErrorCode = 3004 // 资源已删除
+	CodePreconditionFail ErrorCode = 3005 // 前置条件失败
+
+	CodeRateLimited      ErrorCode = 4001 // 请求限流
+	CodeQuotaExceeded    ErrorCode = 4002 // 配额超限
+	CodeRequestTooLarge  ErrorCode = 4003 // 请求体过大
+	CodeMethodNotAllowed ErrorCode = 4004 // 方法不允许
+
+	CodeInternalError ErrorCode = 5001 // 内部错误
+	CodeDatabaseError ErrorCode = 5002 // 数据库错误
+	CodeCacheError    ErrorCode = 5003 // 缓存错误
+
+	CodeServiceUnavail   ErrorCode = 6001 // 服务不可用
+	CodeGatewayTimeout   ErrorCode = 6002 // 网关超时
+	CodeExternalAPIError ErrorCode = 6003 // 外部 API 错误
 )
 
-// HTTPError 统一错误模型，承载 HTTP 状态与业务码
-// 其它中间件或业务代码应通过 ctx.Error(NewHTTPError(...)) 上报
-// 由 ErrorHandlerMiddleware 统一输出响应
-type HTTPError struct {
-	Status  int            `json:"-"`                 // HTTP 状态码（语义正确：401/403/429/500 等）
-	Code    ErrorCode      `json:"code"`              // 业务错误码
-	Message string         `json:"message"`           // 错误信息
-	Details []ErrorDetail  `json:"details,omitempty"` // 强类型错误细节
-	Meta    map[string]any `json:"meta,omitempty"`    // 扩展信息
+// ErrorResponse API 错误响应结构
+// 由 ErrorHandlerMiddleware 统一构造并输出
+type ErrorResponse struct {
+	Code    ErrorCode     `json:"code"`              // 业务错误码
+	Message string        `json:"message"`           // 错误信息
+	Details []ErrorDetail `json:"details,omitempty"` // 错误详情列表
 }
 
-// ErrorDetailType 表示错误细节类型
-// 使用枚举样式字符串，便于客户端/日志分类
-type ErrorDetailType string
-
-const (
-	DetailValidation ErrorDetailType = "validation"
-	DetailRateLimit  ErrorDetailType = "rate_limit"
-	DetailAuth       ErrorDetailType = "auth"
-	DetailGeneric    ErrorDetailType = "generic"
-)
-
-// ErrorDetail 强类型错误细节
-// 不同类型场景复用同一结构，通过 Type 区分场景
-// 未覆盖的场景可通过 HTTPError.Meta 扩展
+// ErrorDetail 错误详情
+// 用于携带字段级别的错误信息（主要用于参数验证）
 type ErrorDetail struct {
-	Type       ErrorDetailType `json:"type"`
-	Field      string          `json:"field,omitempty"` // validation 场景
-	Tag        string          `json:"tag,omitempty"`   // validation 规则标签
-	Message    string          `json:"message,omitempty"`
-	Scope      string          `json:"scope,omitempty"`       // rate_limit：global/ip/path 等
-	Rule       string          `json:"rule,omitempty"`        // rate_limit：规则ID或路径
-	Rate       float64         `json:"rate,omitempty"`        // rate_limit：每秒令牌速率
-	Burst      int             `json:"burst,omitempty"`       // rate_limit：突发容量
-	RetryAfter int64           `json:"retry_after,omitempty"` // rate_limit：建议重试时间（秒）
-	Reason     string          `json:"reason,omitempty"`      // auth：失败原因
+	Field  string `json:"field,omitempty"` // 字段名（验证错误场景）
+	Reason string `json:"reason"`          // 错误原因描述
 }
 
-func (e *HTTPError) Error() string { return e.Message }
+// HTTPStatus 定义可返回 HTTP 状态码的错误接口
+type HTTPStatus interface {
+	HTTPStatusCode() int
+}
 
-// NewHTTPError 构造通用 HTTPError
-func NewHTTPError(code ErrorCode, status int, message string, details ...ErrorDetail) *HTTPError {
-	return &HTTPError{
-		Status:  status,
-		Code:    code,
-		Message: message,
-		Details: details,
+// ============ 哨兵错误（简单场景） ============
+
+var (
+	ErrUnauthorized        = errors.New("unauthorized")          // 未认证
+	ErrForbidden           = errors.New("forbidden")             // 无权限
+	ErrInternalServerError = errors.New("internal server error") // 内部错误
+)
+
+// ============ 具体错误类型（复杂场景） ============
+
+// ValidationError 参数验证错误
+type ValidationError struct {
+	Message string
+	Details []ErrorDetail
+}
+
+func (e *ValidationError) Error() string       { return e.Message }
+func (e *ValidationError) HTTPStatusCode() int { return http.StatusBadRequest }
+
+// NotFoundError 资源不存在错误
+type NotFoundError struct {
+	Resource string // 资源名称，如"管理员"、"订单"
+	ID       string // 资源标识（可选）
+}
+
+func (e *NotFoundError) Error() string {
+	if e.ID != "" {
+		return fmt.Sprintf("%s[%s]不存在", e.Resource, e.ID)
 	}
+	return e.Resource + "不存在"
+}
+func (e *NotFoundError) HTTPStatusCode() int { return http.StatusNotFound }
+
+// ConflictError 资源冲突错误
+type ConflictError struct {
+	Message string
+	Field   string // 冲突字段
 }
 
-// BadRequest 错误请求
-func BadRequest(message string, details ...ErrorDetail) *HTTPError {
-	return NewHTTPError(CodeBadRequest, http.StatusBadRequest, message, details...)
+func (e *ConflictError) Error() string       { return e.Message }
+func (e *ConflictError) HTTPStatusCode() int { return http.StatusConflict }
+
+// RateLimitError 限流错误
+type RateLimitError struct {
+	Scope      string  // 限流作用域："ip", "global", "path", "user" 等
+	Rule       string  // 规则标识（如路径、规则ID）
+	Rate       float64 // 每秒令牌速率
+	Burst      int     // 突发容量
+	RetryAfter int64   // 建议重试时间（秒）
 }
 
-// Unauthorized 未授权
-func Unauthorized(message string, details ...ErrorDetail) *HTTPError {
-	return NewHTTPError(CodeUnauthorized, http.StatusUnauthorized, message, details...)
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("请求过于频繁，请 %d 秒后重试", e.RetryAfter)
+}
+func (e *RateLimitError) HTTPStatusCode() int { return http.StatusTooManyRequests }
+
+// InvalidJSONError JSON 解析错误
+type InvalidJSONError struct {
+	Reason string
 }
 
-// Forbidden 禁止访问
-func Forbidden(message string, details ...ErrorDetail) *HTTPError {
-	return NewHTTPError(CodeForbidden, http.StatusForbidden, message, details...)
+func (e *InvalidJSONError) Error() string {
+	return "JSON 格式错误: " + e.Reason
 }
+func (e *InvalidJSONError) HTTPStatusCode() int { return http.StatusBadRequest }
 
-// TooManyRequests 太多请求
-func TooManyRequests(message string, details ...ErrorDetail) *HTTPError {
-	return NewHTTPError(CodeTooManyRequests, http.StatusTooManyRequests, message, details...)
-}
-
-// InternalServerError 内部服务器错误
-func InternalServerError(message string, details ...ErrorDetail) *HTTPError {
-	return NewHTTPError(CodeInternalServerError, http.StatusInternalServerError, message, details...)
-}
-
-// ValidationDetail 细节构造器
-func ValidationDetail(field, tag, message string) ErrorDetail {
-	return ErrorDetail{Type: DetailValidation, Field: field, Tag: tag, Message: message}
-}
-
-// RateLimitDetail 限流细节
-func RateLimitDetail(scope, rule string, rate float64, burst int, retryAfter int64) ErrorDetail {
-	return ErrorDetail{Type: DetailRateLimit, Scope: scope, Rule: rule, Rate: rate, Burst: burst, RetryAfter: retryAfter}
-}
-
-func AuthDetail(reason string) ErrorDetail {
-	return ErrorDetail{Type: DetailAuth, Reason: reason}
-}
-
-func GenericDetail(message string) ErrorDetail {
-	return ErrorDetail{Type: DetailGeneric, Message: message}
-}
-
-// SetMeta Meta 辅助：设置或增加扩展信息
-func (e *HTTPError) SetMeta(meta map[string]any) *HTTPError {
-	if e.Meta == nil {
-		e.Meta = make(map[string]any)
-	}
-	maps.Copy(e.Meta, meta)
-	return e
-}
-
-func (e *HTTPError) WithMeta(key string, value any) *HTTPError {
-	if e.Meta == nil {
-		e.Meta = make(map[string]any)
-	}
-	e.Meta[key] = value
-	return e
-}
-
-// classifyError 归类为 HTTPError；未知错误统一按 500 返回
-func classifyError(err error) *HTTPError {
-	var he *HTTPError
-	if errors.As(err, &he) {
-		return he
-	}
-	return InternalServerError("内部服务器错误")
-}
-
-// classifyErrorWithContext 增强错误归类，支持 validator 验证错误
-func classifyErrorWithContext(ctx *gin.Context, err error) *HTTPError {
+// classifyError 将错误转换为 ErrorResponse
+func classifyError(ctx *gin.Context, err error) *ErrorResponse {
+	// 1. 处理 validator 验证错误
 	var verrs validator.ValidationErrors
-	if errorsAsValidationErrors(err, &verrs) {
-		return newValidationHTTPError(ctx, verrs)
+	if errors.As(err, &verrs) {
+		return buildValidationResponse(ctx, verrs)
 	}
-	return classifyError(err)
+
+	// 2. 处理具体错误类型
+	var validErr *ValidationError
+	if errors.As(err, &validErr) {
+		return &ErrorResponse{
+			Code:    CodeValidationFailed,
+			Message: validErr.Message,
+			Details: validErr.Details,
+		}
+	}
+
+	var notFoundErr *NotFoundError
+	if errors.As(err, &notFoundErr) {
+		msg := notFoundErr.Resource + "不存在"
+		if notFoundErr.ID != "" {
+			msg = fmt.Sprintf("%s[%s]不存在", notFoundErr.Resource, notFoundErr.ID)
+		}
+		return &ErrorResponse{
+			Code:    CodeNotFound,
+			Message: msg,
+		}
+	}
+
+	var conflictErr *ConflictError
+	if errors.As(err, &conflictErr) {
+		var details []ErrorDetail
+		if conflictErr.Field != "" {
+			details = append(details, ErrorDetail{
+				Field:  conflictErr.Field,
+				Reason: "字段值冲突",
+			})
+		}
+		return &ErrorResponse{
+			Code:    CodeConflict,
+			Message: conflictErr.Message,
+			Details: details,
+		}
+	}
+
+	var rateLimitErr *RateLimitError
+	if errors.As(err, &rateLimitErr) {
+		reason := fmt.Sprintf(
+			"%s级限流触发: 速率%.1freq/s, 容量%d, %d秒后重试",
+			rateLimitErr.Scope,
+			rateLimitErr.Rate,
+			rateLimitErr.Burst,
+			rateLimitErr.RetryAfter,
+		)
+		return &ErrorResponse{
+			Code:    CodeRateLimited,
+			Message: fmt.Sprintf("请求过于频繁，请 %d 秒后重试", rateLimitErr.RetryAfter),
+			Details: []ErrorDetail{{Field: "rate_limit", Reason: reason}},
+		}
+	}
+
+	var jsonErr *InvalidJSONError
+	if errors.As(err, &jsonErr) {
+		return &ErrorResponse{
+			Code:    CodeInvalidJSON,
+			Message: "请求数据格式错误",
+			Details: []ErrorDetail{{Reason: jsonErr.Reason}},
+		}
+	}
+
+	// 3. 处理哨兵错误
+	if errors.Is(err, ErrUnauthorized) {
+		return &ErrorResponse{
+			Code:    CodeUnauthorized,
+			Message: "未授权",
+		}
+	}
+
+	if errors.Is(err, ErrForbidden) {
+		return &ErrorResponse{
+			Code:    CodeForbidden,
+			Message: "无权限访问",
+		}
+	}
+
+	// 4. 识别 GORM 错误
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &ErrorResponse{
+			Code:    CodeNotFound,
+			Message: "记录不存在",
+		}
+	}
+
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return &ErrorResponse{
+			Code:    CodeAlreadyExists,
+			Message: "记录已存在",
+		}
+	}
+
+	// 5. 识别 Context 超时错误
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &ErrorResponse{
+			Code:    CodeGatewayTimeout,
+			Message: "请求处理超时",
+		}
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return &ErrorResponse{
+			Code:    CodeInternalError,
+			Message: "请求已取消",
+		}
+	}
+
+	// 6. 默认返回 400
+	return &ErrorResponse{
+		Code:    CodeValidationFailed,
+		Message: err.Error(),
+	}
 }
 
-// newValidationHTTPError 将验证错误转换为 HTTPError（400 BadRequest）
-func newValidationHTTPError(ctx *gin.Context, validationErrors validator.ValidationErrors) *HTTPError {
+// buildValidationResponse 将 validator 验证错误转换为 ErrorResponse
+func buildValidationResponse(ctx *gin.Context, validationErrors validator.ValidationErrors) *ErrorResponse {
 	trans := GetTranslator(ctx)
 	details := make([]ErrorDetail, 0, len(validationErrors))
 
 	for _, fe := range validationErrors {
 		// 翻译消息
-		msg := translateFieldError(fe, trans)
+		reason := translateFieldError(fe, trans)
 		// 字段名统一小写首字母（使用结构体原始字段名）
 		field := lowerFirst(fe.StructField())
 		// 组装详情
-		details = append(details, ValidationDetail(field, fe.Tag(), msg))
+		details = append(details, ErrorDetail{
+			Field:  field,
+			Reason: reason,
+		})
 	}
 
-	return BadRequest("输入验证失败", details...)
+	return &ErrorResponse{
+		Code:    CodeValidationFailed,
+		Message: "输入验证失败",
+		Details: details,
+	}
 }
 
 // translateFieldError 翻译单个字段错误
@@ -194,20 +308,42 @@ func lowerFirst(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-// errorsAsValidationErrors 封装 errors.As,避免额外导入
-func errorsAsValidationErrors(err error, target *validator.ValidationErrors) bool {
-	var validatorErr validator.ValidationErrors
-	if errors.As(err, &validatorErr) {
-		*target = validatorErr
-		return true
+// determineHTTPStatus 确定 HTTP 状态码
+// 优先级：
+// 1. 实现 HTTPStatus 接口
+// 2. 哨兵错误映射
+// 3. 默认 400
+func determineHTTPStatus(err error) int {
+	// 1. 检查是否实现 HTTPStatus 接口
+	if hs, ok := err.(HTTPStatus); ok {
+		return hs.HTTPStatusCode()
 	}
-	return false
+
+	// 2. 哨兵错误映射
+	switch {
+	case errors.Is(err, ErrUnauthorized):
+		return http.StatusUnauthorized
+	case errors.Is(err, ErrForbidden):
+		return http.StatusForbidden
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, gorm.ErrDuplicatedKey):
+		return http.StatusConflict
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout
+	case errors.Is(err, ErrInternalServerError):
+		return http.StatusInternalServerError
+	}
+
+	// 3. 默认 400
+	return http.StatusBadRequest
 }
 
 // ErrorHandlerMiddleware 统一错误处理中间件（A 模式：HTTP 语义正确 + 响应体携带业务码）
+// 处理 4xx 客户端错误，5xx 错误由 ginRecovery 处理
 // 用法示例：
 //
-//	engine.Middlewares().RegisterGlobal(ErrorHandlerMiddleware(engine.Logger()))
+//	engine.Middlewares().RegisterGlobal(ErrorHandlerMiddleware(engine))
 func ErrorHandlerMiddleware(e *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// 继续执行后续中间件/处理器
@@ -219,39 +355,33 @@ func ErrorHandlerMiddleware(e *Engine) gin.HandlerFunc {
 
 		// 取最后一个错误作为主错误（更具体）
 		err := ctx.Errors.Last().Err
-		he := classifyErrorWithContext(ctx, err)
+
+		// 转换为 ErrorResponse
+		resp := classifyError(ctx, err)
+
+		// 确定 HTTP 状态码
+		status := determineHTTPStatus(err)
 
 		// 记录错误日志（按状态区分级别）
 		attrs := []any{
 			slog.String("path", ctx.Request.URL.Path),
 			slog.String("method", ctx.Request.Method),
 			slog.String("client_ip", ctx.ClientIP()),
-			slog.Int("status", he.Status),
-			slog.Int("code", int(he.Code)),
-			slog.String("message", he.Message),
+			slog.Int("status", status),
+			slog.Int("code", int(resp.Code)),
+			slog.String("message", resp.Message),
 		}
-		if len(he.Details) > 0 {
-			attrs = append(attrs, slog.Any("details", he.Details))
-		}
-		if he.Meta != nil {
-			attrs = append(attrs, slog.Any("meta", he.Meta))
+		if len(resp.Details) > 0 {
+			attrs = append(attrs, slog.Any("details", resp.Details))
 		}
 		if rid := ctx.GetHeader("X-Request-ID"); rid != "" {
 			attrs = append(attrs, slog.String("request_id", rid))
 		}
 
-		if he.Status >= 500 {
-			e.logger.Error("请求错误", attrs...)
-		} else {
-			e.logger.Warn("请求错误", attrs...)
-		}
+		// 4xx 使用 Warn 级别，便于区分客户端错误与服务端错误
+		e.logger.Warn("请求错误", attrs...)
 
 		// 统一输出响应
-		ctx.AbortWithStatusJSON(he.Status, gin.H{
-			"code":    he.Code,
-			"message": he.Message,
-			"details": he.Details,
-			"meta":    he.Meta,
-		})
+		ctx.AbortWithStatusJSON(status, resp)
 	}
 }

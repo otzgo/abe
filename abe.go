@@ -14,7 +14,6 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
 	"github.com/robfig/cron/v3"
@@ -25,6 +24,7 @@ import (
 )
 
 const Version string = "1.0.0"
+
 const defaultShutdownTimeout = 5 * time.Second
 
 // Engine 应用引擎
@@ -40,6 +40,7 @@ type Engine struct {
 	validator   *Validator
 	middlewares *MiddlewareManager
 	i18nBundle  *i18n.Bundle
+	authManager *AuthManager
 
 	basePath string // 路由基础路径
 
@@ -130,6 +131,11 @@ func (e *Engine) Plugins() *PluginManager {
 	return e.plugins
 }
 
+// Auth 认证授权管理器
+func (e *Engine) Auth() *AuthManager {
+	return e.authManager
+}
+
 // AddController 批量追加控制器提供者
 func (e *Engine) AddController(providers ...ControllerProvider) {
 	if len(providers) == 0 {
@@ -140,199 +146,13 @@ func (e *Engine) AddController(providers ...ControllerProvider) {
 	e.controllerRegistry = append(e.controllerRegistry, providers...)
 }
 
-// AddJob 按 Cron 表达式注册一个实现了 cron.Job 接口的任务
-//
-// spec: Cron 表达式，支持秒级 6 字段（秒 分 时 日 月 周）或 @every 语法
-// job: 实现了 Run() 方法的 Job 对象
-// 返回: 任务 ID 和可能的错误
-//
-// 示例：
-//
-//	type CleanupJob struct{}
-//	func (CleanupJob) Run() {
-//	    fmt.Println("执行清理任务")
-//	}
-//
-//	// 每小时执行一次
-//	id, err := engine.AddJob("0 0 * * * *", CleanupJob{})
-func (e *Engine) AddJob(spec string, job cron.Job) (cron.EntryID, error) {
-	return e.cron.AddJob(spec, job)
-}
-
-// SubmitTask 提交任务到协程池
-//
-// task: 要执行的任务函数
-// 返回: 错误信息
-//
-// 示例：
-//
-//	// 提交一个简单任务
-//	err := engine.SubmitTask(func() {
-//	    fmt.Println("任务执行中")
-//	})
-//	if err != nil {
-//	    log.Printf("提交任务失败: %v", err)
-//	}
-//
-//	// 批量提交任务
-//	for i := 0; i < 100; i++ {
-//	    index := i
-//	    engine.SubmitTask(func() {
-//	        fmt.Printf("处理任务 %d\n", index)
-//	    })
-//	}
-func (e *Engine) SubmitTask(task func()) error {
-	return e.pool.Submit(task)
-}
-
 // NewPoolWithFunc 创建函数任务协程池
 //
 // fn: 函数任务处理函数
 // size: 协程池大小，如果为0则使用默认大小
 // 返回: 函数任务协程池实例
-//
-// 示例：
-//
-//	// 定义处理函数
-//	processor := func(arg any) {
-//	    num := arg.(int)
-//	    fmt.Printf("处理数字: %d\n", num)
-//	}
-//
-//	// 创建协程池
-//	pool, err := engine.NewPoolWithFunc(processor, 200)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//	defer pool.Release() // 使用完毕后释放资源
-//
-//	// 批量提交任务
-//	for i := 0; i < 1000; i++ {
-//	    pool.Invoke(i)
-//	}
 func (e *Engine) NewPoolWithFunc(fn func(any), size int) (*ants.PoolWithFunc, error) {
 	return newPoolWithFunc(fn, size, e.logger)
-}
-
-// Enforce 检查权限
-// 直接使用 Casbin 进行权限校验
-func (e *Engine) Enforce(sub string, obj string, act string) (bool, error) {
-	return e.enforcer.Enforce(sub, obj, act)
-}
-
-// GetAuthConfig 从 Engine 的 viper 配置中解析认证配置
-// 若未设置 TokenExpiry，则返回默认值 24 小时
-func (e *Engine) GetAuthConfig() (AuthConfig, error) {
-	var cfg AuthConfig
-	if err := e.Config().UnmarshalKey("auth", &cfg); err != nil {
-		return cfg, err
-	}
-	if cfg.TokenExpiry == 0 {
-		cfg.TokenExpiry = 24
-	}
-	return cfg, nil
-}
-
-// GenerateToken 根据用户声明生成 JWT 字符串
-// 配置项：
-// - auth.jwt_secret: HMAC 密钥（必须）
-// - auth.token_expiry: 过期时间（小时，默认 24）
-func (e *Engine) GenerateToken(claims *UserClaims) (string, error) {
-	cfg, err := e.GetAuthConfig()
-	if err != nil {
-		return "", InternalServerError("解析认证配置失败").WithMeta("error", err.Error())
-	}
-	secret := cfg.JWTSecret
-	if secret == "" {
-		return "", InternalServerError("JWT 密钥未配置").WithMeta("key", "auth.jwt_secret")
-	}
-
-	expHours := cfg.TokenExpiry
-	if expHours == 0 {
-		expHours = 24
-	}
-
-	now := time.Now()
-	if claims.IssuedAt == nil {
-		claims.IssuedAt = jwt.NewNumericDate(now)
-	}
-	if claims.ExpiresAt == nil {
-		claims.ExpiresAt = jwt.NewNumericDate(now.Add(time.Duration(expHours) * time.Hour))
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
-}
-
-// ParseToken 解析 JWT 字符串并返回用户声明
-func (e *Engine) ParseToken(tokenString string) (*UserClaims, error) {
-	cfg, cfgErr := e.GetAuthConfig()
-	if cfgErr != nil {
-		return nil, InternalServerError("解析认证配置失败").WithMeta("error", cfgErr.Error())
-	}
-	secret := cfg.JWTSecret
-	if secret == "" {
-		return nil, InternalServerError("JWT 密钥未配置").WithMeta("key", "auth.jwt_secret")
-	}
-
-	token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, ErrInvalidSigningKey
-		}
-		return []byte(secret), nil
-	})
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrTokenExpired
-		}
-		return nil, err
-	}
-
-	claims, ok := token.Claims.(*UserClaims)
-	if !ok || !token.Valid {
-		return nil, ErrInvalidToken
-	}
-	return claims, nil
-}
-
-// AuthorizeEndpoint 单端点的用户主体权限检查
-func (e *Engine) AuthorizeEndpoint(obj string, act string) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		claims, ok := getUserClaimsOrAbort(ctx)
-		if !ok {
-			return
-		}
-
-		sub := EncodeUserSub(claims.UserID)
-		if !e.checkAuthorization(ctx, sub, obj, act) {
-			ctx.Abort()
-			return
-		}
-		ctx.Next()
-	}
-}
-
-// RoleAuthorizeEndpoint 单端点的角色主体权限检查
-func (e *Engine) RoleAuthorizeEndpoint(obj string, act string) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		claims, ok := getUserClaimsOrAbort(ctx)
-		if !ok {
-			return
-		}
-
-		role := claims.PrimaryRole
-		if role == "" {
-			ctx.Error(&HTTPError{Status: http.StatusForbidden, Code: CodeForbidden, Message: "缺少主角色"})
-			ctx.Abort()
-			return
-		}
-
-		if !e.checkAuthorization(ctx, EncodeRoleSub(role), obj, act) {
-			ctx.Abort()
-			return
-		}
-		ctx.Next()
-	}
 }
 
 // startHTTPServer 启动 HTTP 服务器
@@ -447,18 +267,4 @@ func (e *Engine) shutdown() {
 	e.shutdownHTTPServer()
 	e.closeEventBus()
 	e.releasePool()
-}
-
-// checkAuthorization 统一的权限检查逻辑
-func (e *Engine) checkAuthorization(ctx *gin.Context, sub, obj, act string) bool {
-	allowed, err := e.Enforce(sub, obj, act)
-	if err != nil {
-		ctx.Error(&HTTPError{Status: http.StatusInternalServerError, Code: CodeInternalServerError, Message: "权限检查失败", Details: []ErrorDetail{GenericDetail(err.Error())}})
-		return false
-	}
-	if !allowed {
-		ctx.Error(&HTTPError{Status: http.StatusForbidden, Code: CodeForbidden, Message: "权限不足，无法访问此资源"})
-		return false
-	}
-	return true
 }

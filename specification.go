@@ -33,8 +33,8 @@ func Provider(controller Controller) ControllerProvider {
 	}
 }
 
-// Empty 空结构体，用于表示无请求体的用例
-type Empty = struct{}
+// Nil 空结构体, 用于表示无返回值的用例
+type Nil = struct{}
 
 // UseCase 定义了业务用例的通用接口
 //

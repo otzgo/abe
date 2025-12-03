@@ -21,7 +21,8 @@ func ContainerMiddleware(engine *Engine) gin.HandlerFunc {
 		do.ProvideValue(inj, engine.DB())       // *gorm.DB
 		do.ProvideValue(inj, engine.EventBus()) // EventBus
 		do.ProvideValue(inj, engine.Pool())     // *ants.Pool
-		do.ProvideValue(inj, engine.enforcer)   // *casbin.Enforcer
+		do.ProvideValue(inj, engine.Enforcer()) // *casbin.Enforcer
+		do.ProvideValue(inj, engine.Auth())     // *AuthManager
 
 		do.ProvideValue(inj, GetRequestMeta(ctx))
 
@@ -53,5 +54,9 @@ func Injector(ctx *gin.Context) do.Injector {
 func Invoke[T UseCase[R], R any](ctx *gin.Context) (R, error) {
 	inj := Injector(ctx)
 	useCase := do.MustInvokeStruct[T](inj)
-	return useCase.Handle(ctx)
+	res, err := useCase.Handle(ctx)
+	if err != nil {
+		ctx.Error(err)
+	}
+	return res, err
 }
