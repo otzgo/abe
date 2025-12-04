@@ -238,28 +238,6 @@ func (v *Validator) registerTranslationWithParam(trans ut.Translator, tag string
 	})
 }
 
-// registerStandardValidationTranslations 补充常用标准标签翻译
-func (v *Validator) registerStandardValidationTranslations(trans ut.Translator, locale string) {
-	switch locale {
-	case "zh":
-		v.registerTranslation(trans, "required", "{0}为必填项")
-		v.registerTranslationWithParam(trans, "min", "{0}长度不能少于{1}个字符")
-		v.registerTranslationWithParam(trans, "max", "{0}长度不能超过{1}个字符")
-		v.registerTranslationWithParam(trans, "gte", "{0}必须大于或等于{1}")
-		v.registerTranslationWithParam(trans, "lte", "{0}必须小于或等于{1}")
-		v.registerTranslation(trans, "oneof", "{0}必须是以下值之一: {1}")
-		v.registerTranslation(trans, "datetime", "{0}必须是有效的日期时间格式({1})")
-	case "en":
-		v.registerTranslation(trans, "required", "{0} is required")
-		v.registerTranslationWithParam(trans, "min", "{0} must be at least {1} characters")
-		v.registerTranslationWithParam(trans, "max", "{0} must be at most {1} characters")
-		v.registerTranslationWithParam(trans, "gte", "{0} must be greater than or equal to {1}")
-		v.registerTranslationWithParam(trans, "lte", "{0} must be less than or equal to {1}")
-		v.registerTranslation(trans, "oneof", "{0} must be one of: {1}")
-		v.registerTranslation(trans, "datetime", "{0} must match datetime format({1})")
-	}
-}
-
 // --- 内置通用规则实现（简化版正则） ---
 
 func validateMobile(fl validator.FieldLevel) bool {

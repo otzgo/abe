@@ -43,5 +43,9 @@ func newDB(cfg *viper.Viper) *gorm.DB {
 	if err != nil {
 		panic(fmt.Errorf("致命错误数据库连接：%w", err))
 	}
+	// 如果是开发模式，则打印 SQL
+	if cfg.GetBool("app.debug") {
+		db = db.Debug() // 打印 SQL
+	}
 	return db
 }

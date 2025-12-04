@@ -28,12 +28,10 @@ func ValidationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
 	if defaultLocale != "en" { // 默认 zh
 		translator, _ = uni.GetTranslator("zh")
 		zhtrans.RegisterDefaultTranslations(validate, translator)
-		e.validator.registerStandardValidationTranslations(translator, "zh")
 		e.validator.registerCustomRuleTranslations(translator, "zh")
 	} else {
 		translator, _ = uni.GetTranslator("en")
 		entrans.RegisterDefaultTranslations(validate, translator)
-		e.validator.registerStandardValidationTranslations(translator, "en")
 		e.validator.registerCustomRuleTranslations(translator, "en")
 	}
 
