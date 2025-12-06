@@ -71,9 +71,9 @@ type UseCase[T any] interface {
 }
 
 // EncodeUserSub 编码用户主体为 Casbin 格式
-// - 用户：u:<userID>
-func EncodeUserSub(userID string) string { return "u:" + userID }
+// - 用户：user:<userID>
+func EncodeUserSub(userID string) string { return "user:" + userID }
 
 // EncodeRoleSub 编码角色主体为 Casbin 格式
-// - 角色：r:<role>
-func EncodeRoleSub(role string) string { return "r:" + role }
+// - 角色：role:<role>
+func EncodeRoleSub(role string) string { return "role:" + role }

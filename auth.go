@@ -94,11 +94,3 @@ func getUserClaimsOrAbort(ctx *gin.Context) (*UserClaims, bool) {
 	}
 	return claims, true
 }
-
-// buildObject 根据前缀和请求构建对象路径
-func buildObject(objectPrefix string, ctx *gin.Context) string {
-	if objectPrefix == "*" {
-		return objectPrefix
-	}
-	return objectPrefix + ctx.Request.URL.Path
-}

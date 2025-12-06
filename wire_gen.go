@@ -43,7 +43,7 @@ func InitializeEngine() *Engine {
 	validator := newValidator(viper)
 	middlewareManager := newMiddlewareManager()
 	bundle := newI18nBundle(viper, logger)
-	authManager := newAuthManager(viper, enforcer)
+	authManager := newAuthManager(viper, enforcer, db)
 	abeEngine := &Engine{
 		config:      viper,
 		router:      engine,
