@@ -29,18 +29,19 @@ const defaultShutdownTimeout = 5 * time.Second
 
 // Engine 应用引擎
 type Engine struct {
-	config      *viper.Viper
-	router      *gin.Engine
-	db          *gorm.DB
-	cron        *cron.Cron
-	events      EventBus
-	pool        *ants.Pool
-	logger      *slog.Logger
-	enforcer    *casbin.Enforcer
-	validator   *Validator
-	middlewares *MiddlewareManager
-	i18nBundle  *i18n.Bundle
-	authManager *AuthManager
+	config        *viper.Viper
+	router        *gin.Engine
+	db            *gorm.DB
+	cron          *cron.Cron
+	events        EventBus
+	pool          *ants.Pool
+	logger        *slog.Logger
+	enforcer      *casbin.Enforcer
+	validator     *Validator
+	middlewares   *MiddlewareManager
+	i18nBundle    *i18n.Bundle
+	authManager   *AuthManager
+	dynamicConfig *DynamicConfigManager // 动态配置管理器
 
 	basePath string // 路由基础路径
 
@@ -134,6 +135,11 @@ func (e *Engine) Plugins() *PluginManager {
 // Auth 认证授权管理器
 func (e *Engine) Auth() *AuthManager {
 	return e.authManager
+}
+
+// DynamicConfig 动态配置管理器
+func (e *Engine) DynamicConfig() *DynamicConfigManager {
+	return e.dynamicConfig
 }
 
 // AddController 批量追加控制器提供者

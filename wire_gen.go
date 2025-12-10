@@ -44,19 +44,21 @@ func InitializeEngine() *Engine {
 	middlewareManager := newMiddlewareManager()
 	bundle := newI18nBundle(viper, logger)
 	authManager := newAuthManager(viper, enforcer, db)
+	dynamicConfigManager := newDynamicConfigManager(db, viper, logger)
 	abeEngine := &Engine{
-		config:      viper,
-		router:      engine,
-		db:          db,
-		cron:        cron,
-		events:      abeGoChannelBus,
-		pool:        pool,
-		logger:      logger,
-		enforcer:    enforcer,
-		validator:   validator,
-		middlewares: middlewareManager,
-		i18nBundle:  bundle,
-		authManager: authManager,
+		config:        viper,
+		router:        engine,
+		db:            db,
+		cron:          cron,
+		events:        abeGoChannelBus,
+		pool:          pool,
+		logger:        logger,
+		enforcer:      enforcer,
+		validator:     validator,
+		middlewares:   middlewareManager,
+		i18nBundle:    bundle,
+		authManager:   authManager,
+		dynamicConfig: dynamicConfigManager,
 	}
 	return abeEngine
 }
