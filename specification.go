@@ -1,6 +1,8 @@
 package abe
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,7 +14,7 @@ type Controller interface {
 	// RegisterRoutes 注册控制器的所有路由到指定的路由组
 	// 参数:
 	//   - router: gin.IRouter，用于注册路由
-	RegisterRoutes(router gin.IRouter, mg *MiddlewareManager)
+	RegisterRoutes(router gin.IRouter, mg *MiddlewareManager, engine *Engine)
 }
 
 // ControllerProvider 控制器提供者
@@ -75,5 +77,6 @@ type UseCase[T any] interface {
 func EncodeUserSub(userID string) string { return "user:" + userID }
 
 // EncodeRoleSub 编码角色主体为 Casbin 格式
-// - 角色：role:<role>
-func EncodeRoleSub(role string) string { return "role:" + role }
+// - 角色：role:<role_id>
+// 参数 roleID 为角色的数据库ID（uint），使用ID而非名称确保角色改名时权限规则不失效
+func EncodeRoleSub(roleID uint) string { return "role:" + strconv.FormatUint(uint64(roleID), 10) }

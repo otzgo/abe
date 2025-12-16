@@ -203,7 +203,7 @@ func (e *Engine) mountControllers(basePath string) {
 						}
 					}
 				}()
-				ctrl.RegisterRoutes(routerGroup, e.middlewares)
+				ctrl.RegisterRoutes(routerGroup, e.middlewares, e)
 			}()
 		}
 

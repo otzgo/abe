@@ -3,8 +3,8 @@ package abe
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/casbin/casbin/v2"
@@ -18,21 +18,10 @@ import (
 // 封装 JWT 令牌生成/解析和 Casbin 权限检查功能
 //
 // 权限中间件使用指南：
-// 1. ResourceAuthorizationMiddleware(resource, action)
+// AuthorizationMiddleware(resource, action)
 //   - 在代码中直接指定权限
-//   - 适用于：需要明确权限控制的特殊场景
-//   - 示例：engine.Auth().ResourceAuthorizationMiddleware("member", "read")
-//
-// 2. PathAuthorizationMiddleware(mapper)
-//   - 通过编程方式动态映射权限
-//   - 适用于：需要复杂逻辑判断的场景
-//   - 示例：engine.Auth().PathAuthorizationMiddleware(customMapper)
-//
-// 3. AutoAuthorizationMiddleware()
-//   - 自动从数据库查询权限映射
-//   - 适用于：标准 RESTful 接口，支持热更新
-//   - 示例：engine.Auth().AutoAuthorizationMiddleware()
-//   - 推荐：首选方案，权限配置数据化
+//   - 适用于：需要明确权限控制的场景
+//   - 示例：engine.Auth().AuthorizationMiddleware("member", "read")
 //
 // 所有权限中间件均支持：
 // - 角色权限：通过 role:{role_name} 主体定义
@@ -42,9 +31,6 @@ type AuthManager struct {
 	config   *viper.Viper
 	enforcer *casbin.Enforcer
 	db       *gorm.DB
-
-	// 权限映射缓存
-	mappingCache sync.Map // key: "METHOD:PATH", value: *APIPermissionMapping
 }
 
 // newAuthManager 创建认证授权管理器
@@ -171,13 +157,13 @@ func (am *AuthManager) AuthenticationMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ResourceAuthorizationMiddleware 基于抽象资源权限码的权限控制
+// AuthorizationMiddleware 基于抽象资源权限码的权限控制
 // resource: 资源名称（如 "member"）
 // action: 操作名称（如 "read", "write"）
 //
 // 使用场景：在代码中直接指定权限，适用于需要明确权限控制的场景
 // 支持角色权限和用户特殊权限
-func (am *AuthManager) ResourceAuthorizationMiddleware(resource string, action string) gin.HandlerFunc {
+func (am *AuthManager) AuthorizationMiddleware(resource string, action string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		claims, ok := getUserClaimsOrAbort(ctx)
 		if !ok {
@@ -193,147 +179,39 @@ func (am *AuthManager) ResourceAuthorizationMiddleware(resource string, action s
 
 		ctx.Next()
 	}
-}
-
-// PathAuthorizationMiddleware 基于路由路径自动映射权限码的中间件
-// mapper: 路径到权限码的映射函数，返回 (resource, action, found)
-//
-// 使用场景：通过编程方式动态映射权限，适用于需要复杂逻辑的场景
-// 支持角色权限和用户特殊权限
-func (am *AuthManager) PathAuthorizationMiddleware(mapper func(method, path string) (resource, action string, found bool)) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		claims, ok := getUserClaimsOrAbort(ctx)
-		if !ok {
-			return
-		}
-
-		method := ctx.Request.Method
-		path := ctx.FullPath()
-
-		resource, action, found := mapper(method, path)
-		if !found {
-			ctx.Error(fmt.Errorf("未找到路径权限映射: %s %s: %w", method, path, ErrForbidden))
-			ctx.Abort()
-			return
-		}
-
-		// 使用统一的权限检查逻辑（支持用户特殊权限 + 角色权限）
-		if !am.checkPermission(claims, resource, action) {
-			ctx.Error(fmt.Errorf("权限不足，无法访问此资源: %w", ErrForbidden))
-			ctx.Abort()
-			return
-		}
-
-		ctx.Next()
-	}
-}
-
-// LoadPermissionMappings 从数据库加载所有权限映射到缓存
-// 应在应用启动时调用
-func (am *AuthManager) LoadPermissionMappings() error {
-	if am.db == nil {
-		return fmt.Errorf("数据库连接未初始化")
-	}
-
-	var mappings []APIPermissionMapping
-	if err := am.db.Where("is_active = ?", true).Find(&mappings).Error; err != nil {
-		return fmt.Errorf("加载权限映射失败: %w", err)
-	}
-
-	// 清空旧缓存
-	am.mappingCache.Range(func(key, value interface{}) bool {
-		am.mappingCache.Delete(key)
-		return true
-	})
-
-	// 加载新映射
-	for i := range mappings {
-		key := am.makeMappingKey(mappings[i].Method, mappings[i].Path)
-		am.mappingCache.Store(key, &mappings[i])
-	}
-
-	return nil
-}
-
-// ReloadPermissionMappings 热加载权限映射
-// 可通过管理接口调用实现动态更新
-func (am *AuthManager) ReloadPermissionMappings() error {
-	return am.LoadPermissionMappings()
-}
-
-// makeMappingKey 生成映射缓存的键
-func (am *AuthManager) makeMappingKey(method, path string) string {
-	return method + ":" + path
-}
-
-// getAPIPermissionMapping 查询权限映射
-func (am *AuthManager) getAPIPermissionMapping(method, path string) (*APIPermissionMapping, error) {
-	key := am.makeMappingKey(method, path)
-	value, ok := am.mappingCache.Load(key)
-	if !ok {
-		return nil, fmt.Errorf("未找到权限映射: %s %s", method, path)
-	}
-	mapping, ok := value.(*APIPermissionMapping)
-	if !ok {
-		return nil, fmt.Errorf("权限映射类型错误")
-	}
-	return mapping, nil
 }
 
 // checkPermission 检查用户权限（支持角色权限 + 用户特殊权限）
 func (am *AuthManager) checkPermission(claims *UserClaims, resource, action string) bool {
+	// 0. 检查是否为超级管理员（username = "admin"）
+	// 超级管理员拥有所有权限，无需查询数据库或 Casbin
+	if claims.Username == "admin" {
+		return true
+	}
+
 	// 1. 检查用户特殊权限
 	userSub := EncodeUserSub(claims.UserID)
 	if allowed, _ := am.enforcer.Enforce(userSub, resource, action); allowed {
 		return true
 	}
 
-	// 2. 检查角色权限
-	roles := append([]string(nil), claims.Roles...)
-	if len(roles) == 0 && claims.PrimaryRole != "" {
-		roles = append(roles, claims.PrimaryRole)
+	// 2. 检查角色权限（roles 中存储的是角色ID的字符串形式）
+	roleIDs := append([]string(nil), claims.Roles...)
+	if len(roleIDs) == 0 && claims.PrimaryRole != "" {
+		roleIDs = append(roleIDs, claims.PrimaryRole)
 	}
 
-	for _, role := range roles {
-		roleSub := EncodeRoleSub(role)
+	for _, roleIDStr := range roleIDs {
+		// 角色ID已经是字符串格式，直接转换为uint
+		roleID, err := strconv.ParseUint(roleIDStr, 10, 32)
+		if err != nil {
+			continue // 跳过无效的角色ID
+		}
+		roleSub := EncodeRoleSub(uint(roleID))
 		if allowed, _ := am.enforcer.Enforce(roleSub, resource, action); allowed {
 			return true
 		}
 	}
 
 	return false
-}
-
-// AutoAuthorizationMiddleware 基于数据库映射的自动权限中间件
-// 自动从 api_permission_mappings 表查询当前路径所需权限
-//
-// 使用场景：标准 RESTful 接口，权限配置存储在数据库中，支持热更新
-// 支持角色权限和用户特殊权限
-func (am *AuthManager) AutoAuthorizationMiddleware() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		claims, ok := getUserClaimsOrAbort(ctx)
-		if !ok {
-			return
-		}
-
-		method := ctx.Request.Method
-		path := ctx.FullPath()
-
-		// 查询映射
-		mapping, err := am.getAPIPermissionMapping(method, path)
-		if err != nil {
-			ctx.Error(fmt.Errorf("未找到接口权限配置: %s %s: %w", method, path, ErrForbidden))
-			ctx.Abort()
-			return
-		}
-
-		// 执行权限检查
-		if !am.checkPermission(claims, mapping.Resource, mapping.Action) {
-			ctx.Error(fmt.Errorf("权限不足: 需要 %s 权限: %w", mapping.Code(), ErrForbidden))
-			ctx.Abort()
-			return
-		}
-
-		ctx.Next()
-	}
 }

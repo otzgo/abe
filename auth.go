@@ -29,8 +29,8 @@ type UserClaims struct {
 	Username    string   `json:"uname"`
 	DisplayName string   `json:"display_name,omitempty"`
 	TenantID    string   `json:"tenant_id,omitempty"`
-	PrimaryRole string   `json:"primary_role,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
+	PrimaryRole string   `json:"primary_role,omitempty"` // 主角色ID（字符串格式）
+	Roles       []string `json:"roles,omitempty"`        // 角色ID列表（字符串格式）
 	Scopes      []string `json:"scopes,omitempty"`
 	ClientID    string   `json:"client_id,omitempty"`
 	SessionID   string   `json:"sid,omitempty"`
