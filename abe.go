@@ -18,11 +18,12 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
+	swagfiles "github.com/swaggo/files"
+	ginswag "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
 )
 
+// Version 版本号
 const Version string = "1.0.0"
 
 const defaultShutdownTimeout = 5 * time.Second
@@ -43,6 +44,7 @@ type Engine struct {
 	authManager   *AuthManager
 	dynamicConfig *DynamicConfigManager // 动态配置管理器
 
+	/* RunOption */
 	basePath string // 路由基础路径
 
 	controllersMu      sync.RWMutex
@@ -58,6 +60,10 @@ func (e *Engine) Run(opts ...RunOption) {
 	for _, opt := range opts {
 		opt(e)
 	}
+
+	/* TODO 系统配置待完善 */
+	_ = e.DB().AutoMigrate(&SystemConfig{})
+	_ = e.DynamicConfig().LoadAll()
 
 	e.Plugins().OnBeforeMount()
 	e.mountControllers(e.basePath)
@@ -183,14 +189,14 @@ func (e *Engine) mountControllers(basePath string) {
 		routerGroup := e.router.Group(basePath, e.middlewares.getGlobals()...)
 
 		if e.config.GetBool("swagger.enabled") {
-			var opts []func(*ginSwagger.Config)
+			var opts []func(*ginswag.Config)
 			if url := e.config.GetString("swagger.url"); url != "" {
-				opts = append(opts, ginSwagger.URL(url))
+				opts = append(opts, ginswag.URL(url))
 			}
 			if name := e.config.GetString("swagger.instance"); name != "" {
-				opts = append(opts, ginSwagger.InstanceName(name))
+				opts = append(opts, ginswag.InstanceName(name))
 			}
-			routerGroup.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, opts...))
+			routerGroup.GET("/swagger/*any", ginswag.WrapHandler(swagfiles.Handler, opts...))
 		}
 
 		for _, provider := range snapshot {
@@ -239,7 +245,7 @@ func (e *Engine) shutdownHTTPServer() {
 
 	if err := e.httpServer.Shutdown(ctx); err != nil {
 		if e.logger != nil {
-			e.logger.Error("HTTP服务器关闭失败", "error", err)
+			e.logger.Error("HTTP 服务器关闭失败", "error", err)
 		}
 		panic(fmt.Errorf("优雅退出服务器失败：%w", err))
 	}

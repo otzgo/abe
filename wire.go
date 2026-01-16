@@ -32,8 +32,8 @@ func InitializeEngine() *Engine {
 	wire.Build(
 		wire.Struct(
 			new(Engine),
-			"config", "router", "db", "cron", "events", "pool",
-			"logger", "enforcer", "validator", "middlewares", "i18nBundle", "authManager", "dynamicConfig",
+			"config", "router", "db", "cron", "events", "pool", "logger", "enforcer", "validator", "middlewares",
+			"i18nBundle", "authManager", "dynamicConfig",
 		),
 		newCron,
 		newConfig,

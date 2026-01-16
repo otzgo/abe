@@ -117,3 +117,4 @@ mem.out
 # Documentation build output
 /docs/_build/
 /docs/site/
+/docs
