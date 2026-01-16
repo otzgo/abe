@@ -1,4 +1,4 @@
-module abe
+module github.com/otzgo/abe
 
 go 1.24.0
 
