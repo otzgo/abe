@@ -120,14 +120,10 @@ func setDefaultLogConfig(cfg *viper.Viper, lc *LogConfig) {
 	}
 	// 如果输出到文件但没有设置文件路径，则设置默认路径
 	if lc.Type == "file" && lc.File.Path == "" {
-		// 获取用户家目录
 		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			// 设置默认日志路径为用户家目录下的 .gra/logs/app.log
-			lc.File.Path = filepath.Join(homeDir, cfg.GetString("app.name"), "logs", "app.log")
-		} else {
-			// 如果无法获取用户家目录，则使用当前目录下的 logs/app.log
-			lc.File.Path = filepath.Join("./logs", cfg.GetString("app.name")+".log")
+		if err != nil {
+			panic(fmt.Sprintf("无法获取用户家目录: %v", err))
 		}
+		lc.File.Path = filepath.Join(homeDir, cfg.GetString("app.name"), "logs", "app.log")
 	}
 }

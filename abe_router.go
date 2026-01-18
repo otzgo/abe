@@ -9,7 +9,12 @@ import (
 )
 
 func newRouter(cfg *viper.Viper, logger *slog.Logger) *gin.Engine {
-	gin.SetMode(cfg.GetString("server.mode"))
+
+	if cfg.GetBool("app.debug") {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	router := gin.New()
 	router.Use(ginRecovery(logger))
 	router.Use(ginLogger(logger))

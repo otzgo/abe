@@ -3,7 +3,6 @@ package abe
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,27 +24,25 @@ func newConfig() *viper.Viper {
 	// 创建并解析 flags
 	flags := createFlags()
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		// 解析错误，记录日志并使用默认值继续
-		_getBasicLogger(slog.LevelWarn).Warn("解析命令行参数失败，将忽略 CLI 配置", "error", err.Error())
+		panic(fmt.Errorf("致命错误解析命令行参数：%w", err))
 	}
 
 	// 从 flag 中获取 configDir
 	configDir, _ := flags.GetString("config-dir")
 
 	// 加载 .env 文件
-	_loadEnvFiles(configDir)
+	loadEnvFiles(configDir)
 
 	// 创建 viper 实例
 	config := viper.New()
 
 	// 绑定 flags 到 viper（优先级最高）
 	if err := config.BindPFlags(flags); err != nil {
-		// 绑定失败，记录警告但继续运行
-		_getBasicLogger(slog.LevelWarn).Warn("绑定命令行参数到配置失败", "error", err.Error())
+		panic(fmt.Errorf("致命错误绑定命令行参数到配置：%w", err))
 	}
 
 	// 配置环境变量支持
-	_setupEnvConfig(config)
+	setupEnvConfig(config)
 
 	// 配置文件设置
 	config.SetConfigName(configName)
@@ -56,7 +53,7 @@ func newConfig() *viper.Viper {
 	}
 
 	// 读取配置文件
-	_handleConfigFileRead(config)
+	handleConfigFileRead(config)
 
 	return config
 }
@@ -66,15 +63,14 @@ func newConfig() *viper.Viper {
 func getConfigPaths(configDir string) []string {
 	var paths []string
 
+	paths = append(paths, "./configs")
 	if configDir != "" {
-		paths = append(paths, fmt.Sprintf("/etc/%s/", configDir))
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
 			paths = append(paths, filepath.Join(homeDir, fmt.Sprintf(".%s", configDir)))
 		}
+		paths = append(paths, fmt.Sprintf("/etc/%s/", configDir))
 	}
-	paths = append(paths, "./configs")
-	paths = append(paths, ".")
 
 	return paths
 }
@@ -111,32 +107,29 @@ func createFlags() *pflag.FlagSet {
 	return flags
 }
 
-// _setupEnvConfig 配置 viper 的环境变量支持
-func _setupEnvConfig(config *viper.Viper) {
+// setupEnvConfig 配置 viper 的环境变量支持
+func setupEnvConfig(config *viper.Viper) {
 	config.SetEnvPrefix(envPrefix)                                    // 环境变量前缀
 	config.AutomaticEnv()                                             // 自动读取环境变量
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_")) // 支持嵌套配置，如 server.address -> ABE_SERVER_ADDRESS
 }
 
-// _handleConfigFileRead 读取配置文件并处理错误
-func _handleConfigFileRead(config *viper.Viper) {
+// handleConfigFileRead 读取配置文件并处理错误
+func handleConfigFileRead(config *viper.Viper) {
 	err := config.ReadInConfig()
 	if err != nil {
 		// 判断是否是配置文件不存在的错误
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
-			// 配置文件不存在，记录警告日志
-			_getBasicLogger(slog.LevelWarn).Warn("配置文件未找到，将使用环境变量和默认值", "error", err.Error())
-		} else {
-			// 其他错误，panic
-			panic(fmt.Errorf("致命错误读取配置文件：%w", err))
+			panic(fmt.Errorf("致命错误配置文件未找到：%w", err))
 		}
+		panic(fmt.Errorf("读取配置文件失败：%w", err))
 	}
 }
 
-// _loadEnvFiles 加载 .env 文件
+// loadEnvFiles 加载 .env 文件
 // 从多个位置查找 .env 文件并加载到环境变量中
-func _loadEnvFiles(configDir string) {
+func loadEnvFiles(configDir string) {
 	// 获取配置文件搜索路径列表
 	configPaths := getConfigPaths(configDir)
 
@@ -151,20 +144,10 @@ func _loadEnvFiles(configDir string) {
 		if _, err := os.Stat(envPath); err == nil {
 			// 文件存在，尝试加载
 			if err := godotenv.Load(envPath); err == nil {
-				// 加载成功，记录日志并返回
-				_getBasicLogger(slog.LevelInfo).Info("成功加载 .env 文件", "path", envPath)
 				return
 			}
 		}
 	}
 
 	// 未找到 .env 文件，这是正常情况，不需要记录日志
-}
-
-// _getBasicLogger 创建基础的日志记录器
-// 用于在配置系统初始化期间记录日志
-func _getBasicLogger(level slog.Level) *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	}))
 }
