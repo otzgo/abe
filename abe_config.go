@@ -111,9 +111,9 @@ func createFlags() *pflag.FlagSet {
 
 // setupEnvConfig 配置 viper 的环境变量支持
 func setupEnvConfig(config *viper.Viper) {
-	config.SetEnvPrefix(envPrefix)                                    // 环境变量前缀
-	config.AutomaticEnv()                                             // 自动读取环境变量
-	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_")) // 支持嵌套配置，如 server.address -> ABE_SERVER_ADDRESS
+	config.SetEnvPrefix(envPrefix)                          // 环境变量前缀
+	config.AutomaticEnv()                                   // 自动读取环境变量
+	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_")) // 支持嵌套配置，如 server.address -> ABE_SERVER_ADDRESS
 }
 
 // handleConfigFileRead 读取配置文件并处理错误
