@@ -24,6 +24,10 @@ func newConfig() *viper.Viper {
 	// 创建并解析 flags
 	flags := createFlags()
 	if err := flags.Parse(os.Args[1:]); err != nil {
+		// 当参数为 -h 或 --help 时,flags.Parse() 返回 pflag.ErrHelp,这不是错误
+		if errors.Is(err, pflag.ErrHelp) {
+			os.Exit(0)
+		}
 		panic(fmt.Errorf("致命错误解析命令行参数：%w", err))
 	}
 
