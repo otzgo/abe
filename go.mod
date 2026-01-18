@@ -7,7 +7,7 @@ toolchain go1.24.10
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/ThreeDotsLabs/watermill v1.5.1
-	github.com/casbin/casbin/v2 v2.135.0
+	github.com/casbin/casbin/v3 v3.8.1
 	github.com/casbin/gorm-adapter/v3 v3.40.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/locales v0.14.1
@@ -41,7 +41,6 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
-	github.com/casbin/casbin/v3 v3.8.1 // indirect
 	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

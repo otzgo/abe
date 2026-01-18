@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/casbin/casbin/v2"
+	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
@@ -48,7 +48,6 @@ type Engine struct {
 	basePath string // 路由基础路径
 
 	controllersMu      sync.RWMutex
-	mountOnce          sync.Once
 	controllerRegistry []ControllerProvider
 
 	httpServer *http.Server
@@ -176,47 +175,38 @@ func (e *Engine) startHTTPServer() {
 
 // mountControllers 将所有控制器挂载到指定前缀分组（仅启动阶段，幂等）
 func (e *Engine) mountControllers(basePath string) {
-	e.mountOnce.Do(func() {
-		e.controllersMu.RLock()
-		snapshot := make([]ControllerProvider, len(e.controllerRegistry))
-		copy(snapshot, e.controllerRegistry)
-		e.controllersMu.RUnlock()
+	e.logger.Info("开始注册控制器路由到分组", "basePath", basePath, "count", len(e.controllerRegistry))
 
-		if e.logger != nil {
-			e.logger.Info("开始注册控制器路由到分组", "basePath", basePath, "count", len(snapshot))
+	rg := e.router.Group(basePath, e.middlewares.getGlobals()...)
+
+	if e.config.GetBool("swagger.enabled") {
+		var opts []func(*ginswag.Config)
+		if url := e.config.GetString("swagger.url"); url != "" {
+			opts = append(opts, ginswag.URL(url))
 		}
-
-		routerGroup := e.router.Group(basePath, e.middlewares.getGlobals()...)
-
-		if e.config.GetBool("swagger.enabled") {
-			var opts []func(*ginswag.Config)
-			if url := e.config.GetString("swagger.url"); url != "" {
-				opts = append(opts, ginswag.URL(url))
-			}
-			if name := e.config.GetString("swagger.instance"); name != "" {
-				opts = append(opts, ginswag.InstanceName(name))
-			}
-			routerGroup.GET("/swagger/*any", ginswag.WrapHandler(swagfiles.Handler, opts...))
+		if name := e.config.GetString("swagger.instance"); name != "" {
+			opts = append(opts, ginswag.InstanceName(name))
 		}
+		rg.GET("/swagger/*any", ginswag.WrapHandler(swagfiles.Handler, opts...))
+	}
 
-		for _, provider := range snapshot {
-			ctrl := provider()
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						if e.logger != nil {
-							e.logger.Error("注册控制器路由发生异常", "basePath", basePath, "panic", r)
-						}
+	for _, provider := range e.controllerRegistry {
+		ctrl := provider()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if e.logger != nil {
+						e.logger.Error("注册控制器路由发生异常", "basePath", basePath, "panic", r)
 					}
-				}()
-				ctrl.RegisterRoutes(routerGroup, e.middlewares, e)
+				}
 			}()
-		}
+			ctrl.RegisterRoutes(rg, e.middlewares, e)
+		}()
+	}
 
-		if e.logger != nil {
-			e.logger.Info("控制器路由注册完成（分组）", "basePath", basePath)
-		}
-	})
+	if e.logger != nil {
+		e.logger.Info("控制器路由注册完成（分组）", "basePath", basePath)
+	}
 }
 
 // initializeHTTPServer 创建 HTTP 服务器实例
