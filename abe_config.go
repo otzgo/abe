@@ -51,6 +51,8 @@ func newConfig() *viper.Viper {
 	setupEnvConfig(config)
 
 	// 绑定 flags 到 viper（优先级最高）
+	// 注意：flag 名称使用点号分隔的嵌套格式（如 "server.address"）
+	// 这样可以直接映射到配置文件的嵌套结构，确保 flag 优先级高于配置文件
 	if err := config.BindPFlags(flags); err != nil {
 		panic(fmt.Errorf("致命错误绑定命令行参数到配置：%w", err))
 	}
@@ -82,27 +84,27 @@ func createFlags() *pflag.FlagSet {
 	// 配置目录 flag
 	flags.String("config-dir", defaultConfigDir, "config directory")
 
-	// 服务器配置 flags
-	flags.String("server-address", "", "server listen address (e.g., :8080)")
-	flags.String("server-mode", "", "server mode (debug, release)")
-	flags.String("server-shutdown-timeout", "", "server graceful shutdown timeout (e.g., 5s)")
+	// 服务器配置 flags（使用嵌套键格式以匹配配置文件结构）
+	flags.String("server.address", "", "server listen address (e.g., :8080)")
+	flags.String("server.mode", "", "server mode (debug, release)")
+	flags.String("server.shutdown_timeout", "", "server graceful shutdown timeout (e.g., 5s)")
 
 	// 应用配置 flags
-	flags.String("app-name", "", "application name")
-	flags.Bool("app-debug", false, "enable debug mode")
+	flags.String("app.name", "", "application name")
+	flags.Bool("app.debug", false, "enable debug mode")
 
 	// 日志配置 flags
-	flags.String("logger-level", "", "log level (debug, info, warn, error)")
-	flags.String("logger-format", "", "log format (text, json)")
-	flags.String("logger-type", "", "log output type (console, file)")
+	flags.String("logger.level", "", "log level (debug, info, warn, error)")
+	flags.String("logger.format", "", "log format (text, json)")
+	flags.String("logger.type", "", "log output type (console, file)")
 
 	// 数据库配置 flags
-	flags.String("database-type", "", "database type (mysql, postgres)")
-	flags.String("database-host", "", "database host")
-	flags.Int("database-port", 0, "database port")
-	flags.String("database-user", "", "database username")
-	flags.String("database-password", "", "database password")
-	flags.String("database-dbname", "", "database name")
+	flags.String("database.type", "", "database type (mysql, postgres)")
+	flags.String("database.host", "", "database host")
+	flags.Int("database.port", 0, "database port")
+	flags.String("database.user", "", "database username")
+	flags.String("database.password", "", "database password")
+	flags.String("database.dbname", "", "database name")
 
 	return flags
 }
