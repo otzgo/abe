@@ -36,14 +36,6 @@ func newConfig() *viper.Viper {
 	// 创建 viper 实例
 	config := viper.New()
 
-	// 绑定 flags 到 viper（优先级最高）
-	if err := config.BindPFlags(flags); err != nil {
-		panic(fmt.Errorf("致命错误绑定命令行参数到配置：%w", err))
-	}
-
-	// 配置环境变量支持
-	setupEnvConfig(config)
-
 	// 配置文件设置
 	config.SetConfigName(configName)
 	config.SetConfigType(configType)
@@ -54,6 +46,14 @@ func newConfig() *viper.Viper {
 
 	// 读取配置文件
 	handleConfigFileRead(config)
+
+	// 配置环境变量支持
+	setupEnvConfig(config)
+
+	// 绑定 flags 到 viper（优先级最高）
+	if err := config.BindPFlags(flags); err != nil {
+		panic(fmt.Errorf("致命错误绑定命令行参数到配置：%w", err))
+	}
 
 	return config
 }
