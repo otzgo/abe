@@ -57,7 +57,7 @@ const (
 )
 
 // ErrorResponse API 错误响应结构
-// 由 ErrorHandlerMiddleware 统一构造并输出
+// 由 errorHandlerMiddleware 统一构造并输出
 type ErrorResponse struct {
 	Code    ErrorCode     `json:"code"`              // 业务错误码
 	Message string        `json:"message"`           // 错误信息
@@ -339,12 +339,12 @@ func determineHTTPStatus(err error) int {
 	return http.StatusBadRequest
 }
 
-// ErrorHandlerMiddleware 统一错误处理中间件（A 模式：HTTP 语义正确 + 响应体携带业务码）
+// errorHandlerMiddleware 统一错误处理中间件（A 模式：HTTP 语义正确 + 响应体携带业务码）
 // 处理 4xx 客户端错误，5xx 错误由 ginRecovery 处理
 // 用法示例：
 //
-//	engine.MiddlewareManager().RegisterGlobal(ErrorHandlerMiddleware(engine))
-func ErrorHandlerMiddleware(e *Engine) gin.HandlerFunc {
+//	engine.MiddlewareManager().RegisterGlobal(errorHandlerMiddleware(engine))
+func errorHandlerMiddleware(e *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// 继续执行后续中间件/处理器
 		ctx.Next()

@@ -9,8 +9,8 @@ import (
 
 const contextKeyI18nLocalizer = "abe.i18n.localizer"
 
-// I18nMiddleware 根据配置解析语言偏好，在请求上下文中注入 Localizer
-func I18nMiddleware(e *Engine) gin.HandlerFunc {
+// i18nMiddleware 根据配置解析语言偏好，在请求上下文中注入 Localizer
+func i18nMiddleware(e *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		cfg := e.Config()
 		langQueryKey := cfg.GetString("i18n.lang_query_key")

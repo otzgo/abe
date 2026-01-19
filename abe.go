@@ -177,7 +177,19 @@ func (e *Engine) startHTTPServer() {
 func (e *Engine) mountControllers(basePath string) {
 	e.logger.Info("开始注册控制器路由到分组", "basePath", basePath, "count", len(e.controllerRegistry))
 
-	rg := e.router.Group(basePath, e.middlewareManager.getGlobals()...)
+	handlers := make([]gin.HandlerFunc, 0)
+	handlers = append(
+		handlers,
+		corsMiddleware(e.Config()),
+		requestIDMiddleware(),
+		requestTimeMiddleware(),
+		i18nMiddleware(e),
+		validationTranslatorMiddleware(e),
+		containerMiddleware(e),
+	)
+	handlers = append(handlers, e.middlewareManager.getGlobals()...)
+	handlers = append(handlers, errorHandlerMiddleware(e))
+	rg := e.router.Group(basePath, handlers...)
 
 	if e.config.GetBool("swagger.enabled") {
 		var opts []func(*ginswag.Config)

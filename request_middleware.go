@@ -18,12 +18,12 @@ type RequestMeta struct {
 	RequestTime time.Time
 }
 
-// RequestIDMiddleware 生成/透传请求 ID，并写入上下文与响应头
+// requestIDMiddleware 生成/透传请求 ID，并写入上下文与响应头
 // 约定：
 // - 优先使用客户端请求头 X-Request-ID；若缺失则生成一个 UUIDv4
 // - 将请求 ID 写入 gin.Context（键：abe.request_id）与响应头 X-Request-ID
 // - 不阻断链条，调用 ctx.Next()
-func RequestIDMiddleware() gin.HandlerFunc {
+func requestIDMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		requestID := ctx.GetHeader("X-Request-ID")
 		if requestID == "" {
@@ -35,12 +35,12 @@ func RequestIDMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RequestTimeMiddleware 记录请求开始时间到上下文
+// requestTimeMiddleware 记录请求开始时间到上下文
 // 约定：
 // - 在进入后续中间件/处理器前写入 time.Now()
 // - 键名为 abe.request_start，供日志/耗时统计等使用
 // - 不阻断链条，调用 ctx.Next()
-func RequestTimeMiddleware() gin.HandlerFunc {
+func requestTimeMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		start := time.Now()
 		ctx.Set(requestStartKey, start)

@@ -8,9 +8,9 @@ import (
 // doInjectorKey 为请求级 DI 容器在 gin.Context 中的键名
 const doInjectorKey = "abe.do_injector"
 
-// ContainerMiddleware 在每个请求开始时创建一个 do.Injector，并注册框架级依赖与请求级元信息。
+// containerMiddleware 在每个请求开始时创建一个 do.Injector，并注册框架级依赖与请求级元信息。
 // 生命周期：在请求结束时统一执行 injector.Shutdown()，确保资源优雅释放。
-func ContainerMiddleware(engine *Engine) gin.HandlerFunc {
+func containerMiddleware(engine *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		inj := do.New()
 

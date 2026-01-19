@@ -121,7 +121,7 @@ func (am *AuthManager) ParseToken(tokenString string) (*UserClaims, error) {
 // - 提取 Authorization: Bearer {token}
 // - 校验 JWT
 // - 将 UserClaims 写入上下文
-// - 出错时通过 ErrorHandlerMiddleware 统一响应
+// - 出错时通过 errorHandlerMiddleware 统一响应
 func (am *AuthManager) AuthenticationMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authHeader := ctx.GetHeader("Authorization")

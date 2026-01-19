@@ -11,9 +11,9 @@ import (
 
 const translatorContextKey = "abe.translator"
 
-// ValidationTranslatorMiddleware 注入翻译器到请求上下文
+// validationTranslatorMiddleware 注入翻译器到请求上下文
 // 从 Engine 中获取验证器和默认语言配置
-func ValidationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
+func validationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
 	var translator ut.Translator
 
 	// 获取验证器
@@ -27,11 +27,11 @@ func ValidationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
 
 	if defaultLocale != "en" { // 默认 zh
 		translator, _ = uni.GetTranslator("zh")
-		zhtrans.RegisterDefaultTranslations(validate, translator)
+		_ = zhtrans.RegisterDefaultTranslations(validate, translator)
 		e.validator.registerCustomRuleTranslations(translator, "zh")
 	} else {
 		translator, _ = uni.GetTranslator("en")
-		entrans.RegisterDefaultTranslations(validate, translator)
+		_ = entrans.RegisterDefaultTranslations(validate, translator)
 		e.validator.registerCustomRuleTranslations(translator, "en")
 	}
 
