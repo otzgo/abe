@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ErrDuplicateName = errors.New("middleware name already exists")
-	ErrNotFound      = errors.New("middleware not found")
-	ErrInvalidMerge  = errors.New("invalid middleware group merge")
+	ErrDuplicateName = errors.New("中间件名称已经存在")
+	ErrNotFound      = errors.New("未找到中间件")
+	ErrInvalidMerge  = errors.New("无效中间件组合并")
 )
 
 type MiddlewareManager struct {
@@ -34,12 +34,6 @@ func (m *MiddlewareManager) RegisterGlobal(handlers ...gin.HandlerFunc) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.globals = append(m.globals, handlers...)
-}
-
-func (m *MiddlewareManager) ReplaceGlobals(handlers ...gin.HandlerFunc) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.globals = append([]gin.HandlerFunc(nil), handlers...)
 }
 
 func (m *MiddlewareManager) getGlobals() []gin.HandlerFunc {

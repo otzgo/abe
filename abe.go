@@ -30,19 +30,19 @@ const defaultShutdownTimeout = 5 * time.Second
 
 // Engine 应用引擎
 type Engine struct {
-	config        *viper.Viper
-	router        *gin.Engine
-	db            *gorm.DB
-	cron          *cron.Cron
-	events        EventBus
-	pool          *ants.Pool
-	logger        *slog.Logger
-	enforcer      *casbin.Enforcer
-	validator     *Validator
-	middlewares   *MiddlewareManager
-	i18nBundle    *i18n.Bundle
-	authManager   *AuthManager
-	dynamicConfig *DynamicConfigManager // 动态配置管理器
+	config            *viper.Viper
+	router            *gin.Engine
+	db                *gorm.DB
+	cron              *cron.Cron
+	events            EventBus
+	pool              *ants.Pool
+	logger            *slog.Logger
+	enforcer          *casbin.Enforcer
+	validator         *Validator
+	middlewareManager *MiddlewareManager
+	i18nBundle        *i18n.Bundle
+	authManager       *AuthManager
+	dynamicConfig     *DynamicConfigManager // 动态配置管理器
 
 	/* RunOption */
 	basePath string // 路由基础路径
@@ -119,9 +119,9 @@ func (e *Engine) Logger() *slog.Logger {
 	return e.logger
 }
 
-// Middlewares 中间件管理器
-func (e *Engine) Middlewares() *MiddlewareManager {
-	return e.middlewares
+// MiddlewareManager 中间件管理器
+func (e *Engine) MiddlewareManager() *MiddlewareManager {
+	return e.middlewareManager
 }
 
 // Validator 验证器管理器
@@ -177,7 +177,7 @@ func (e *Engine) startHTTPServer() {
 func (e *Engine) mountControllers(basePath string) {
 	e.logger.Info("开始注册控制器路由到分组", "basePath", basePath, "count", len(e.controllerRegistry))
 
-	rg := e.router.Group(basePath, e.middlewares.getGlobals()...)
+	rg := e.router.Group(basePath, e.middlewareManager.getGlobals()...)
 
 	if e.config.GetBool("swagger.enabled") {
 		var opts []func(*ginswag.Config)
@@ -200,7 +200,7 @@ func (e *Engine) mountControllers(basePath string) {
 					}
 				}
 			}()
-			ctrl.RegisterRoutes(rg, e.middlewares, e)
+			ctrl.RegisterRoutes(rg, e.middlewareManager, e)
 		}()
 	}
 

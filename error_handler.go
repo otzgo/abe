@@ -343,7 +343,7 @@ func determineHTTPStatus(err error) int {
 // 处理 4xx 客户端错误，5xx 错误由 ginRecovery 处理
 // 用法示例：
 //
-//	engine.Middlewares().RegisterGlobal(ErrorHandlerMiddleware(engine))
+//	engine.MiddlewareManager().RegisterGlobal(ErrorHandlerMiddleware(engine))
 func ErrorHandlerMiddleware(e *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// 继续执行后续中间件/处理器

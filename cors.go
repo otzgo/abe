@@ -16,7 +16,7 @@ import (
 // - 支持域名白名单（含通配 *.example.com）与 "*"；当允许凭证时，自动避免 "*"，改为回显匹配的 Origin
 // - 预检请求（OPTIONS）直接 204 返回并携带 CORS 头，避免触达业务处理器
 // - 方法/头/暴露头/凭证/缓存时间均可配置；未配置时使用合理默认值
-// - 与 abe 的中间件管理配合：通过 Engine.Middlewares().RegisterGlobal(CORSMiddleware(engine.Config())) 注册到 "/api" 分组
+// - 与 abe 的中间件管理配合：通过 Engine.MiddlewareManager().RegisterGlobal(CORSMiddleware(engine.Config())) 注册到 "/api" 分组
 func CORSMiddleware(cfg *viper.Viper) gin.HandlerFunc {
 	allowedOrigins := getStringSlice(cfg, "server.cors.allow_origins", []string{"*"})
 	allowedMethods := getStringSlice(cfg, "server.cors.allow_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})

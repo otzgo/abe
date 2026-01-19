@@ -32,7 +32,7 @@ func InitializeEngine() *Engine {
 	wire.Build(
 		wire.Struct(
 			new(Engine),
-			"config", "router", "db", "cron", "events", "pool", "logger", "enforcer", "validator", "middlewares",
+			"config", "router", "db", "cron", "events", "pool", "logger", "enforcer", "validator", "middlewareManager",
 			"i18nBundle", "authManager", "dynamicConfig",
 		),
 		newCron,
