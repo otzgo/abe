@@ -45,7 +45,7 @@ func InitializeEngine() *Engine {
 	bundle := newI18nBundle(viper, logger)
 	authManager := newAuthManager(viper, enforcer, db)
 	dynamicConfigManager := newDynamicConfigManager(db, viper, logger)
-	rootScope := newRootScope(viper, db, abeGoChannelBus, pool, logger, enforcer)
+	rootScope := newRootScope()
 	abeEngine := &Engine{
 		config:            viper,
 		router:            engine,
