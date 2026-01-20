@@ -72,6 +72,8 @@ func (e *Engine) Run(opts ...RunOption) {
 	_ = e.DB().AutoMigrate(&SystemConfig{})
 	_ = e.DynamicConfig().LoadAll()
 
+	e.doPackage()
+
 	e.Plugins().OnBeforeMount()
 	e.mountControllers(e.basePath)
 	e.Plugins().OnAfterMount()
@@ -289,4 +291,23 @@ func (e *Engine) shutdown() {
 	e.shutdownHTTPServer()
 	e.closeEventBus()
 	e.releasePool()
+}
+
+func (e *Engine) doPackage(injector ...do.Injector) {
+	p := do.Package(
+		do.Eager(e.Config()),
+		do.Eager(e.Logger()),
+		do.Eager(e.DB()),
+		do.Eager(e.EventBus()),
+		do.Eager(e.Pool()),
+		do.Eager(e.Enforcer()),
+	)
+
+	if len(injector) > 0 {
+		for _, i := range injector {
+			p(i)
+		}
+	} else {
+		p(e.rootScope)
+	}
 }

@@ -12,8 +12,9 @@ const doInjectorKey = "abe.do_injector"
 // 生命周期：在请求结束时统一执行 injector.Shutdown()，确保资源优雅释放。
 func containerMiddleware(engine *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		requestScope := engine.rootScope.Scope("request")
+		requestScope := do.New()
 
+		engine.doPackage(requestScope)
 		do.ProvideValue(requestScope, GetRequestMeta(ctx))
 
 		ctx.Set(doInjectorKey, requestScope)
