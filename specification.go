@@ -35,9 +35,6 @@ func Provider(controller Controller) ControllerProvider {
 	}
 }
 
-// Nil 空结构体, 用于表示无返回值的用例
-type Nil = struct{}
-
 // UseCase 定义了业务用例的通用接口
 //
 // 每个用例对应一个具体的业务操作，通过 Handle 方法处理请求并返回结果

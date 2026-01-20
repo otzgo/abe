@@ -12,28 +12,15 @@ const doInjectorKey = "abe.do_injector"
 // 生命周期：在请求结束时统一执行 injector.Shutdown()，确保资源优雅释放。
 func containerMiddleware(engine *Engine) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		inj := do.New()
+		requestScope := engine.rootScope.Scope("request")
 
-		// 框架级依赖注册（单例值）
-		do.ProvideValue(inj, engine)            // *Engine
-		do.ProvideValue(inj, engine.Config())   // *viper.Viper
-		do.ProvideValue(inj, engine.Logger())   // *slog.Logger
-		do.ProvideValue(inj, engine.DB())       // *gorm.DB
-		do.ProvideValue(inj, engine.EventBus()) // EventBus
-		do.ProvideValue(inj, engine.Pool())     // *ants.Pool
-		do.ProvideValue(inj, engine.Enforcer()) // *casbin.Enforcer
-		do.ProvideValue(inj, engine.Auth())     // *AuthManager
+		do.ProvideValue(requestScope, GetRequestMeta(ctx))
 
-		do.ProvideValue(inj, GetRequestMeta(ctx))
+		ctx.Set(doInjectorKey, requestScope)
 
-		// 将注入器放入上下文，供后续中间件/控制器使用
-		ctx.Set(doInjectorKey, inj)
-
-		// 继续后续处理
 		ctx.Next()
 
-		// 请求结束，统一关闭注入器，触发已注册服务的 Shutdown() 钩子
-		inj.Shutdown()
+		_ = requestScope.Shutdown()
 	}
 }
 
@@ -52,11 +39,11 @@ func Injector(ctx *gin.Context) do.Injector {
 //   - R: UseCase 处理函数的返回值类型。
 //   - error: 处理过程中遇到的错误，若成功则为 nil。
 func Invoke[T UseCase[R], R any](ctx *gin.Context) (R, error) {
-	inj := Injector(ctx)
-	useCase := do.MustInvokeStruct[T](inj)
+	injector := Injector(ctx)
+	useCase := do.MustInvokeStruct[T](injector)
 	res, err := useCase.Handle(ctx)
 	if err != nil {
-		ctx.Error(err)
+		_ = ctx.Error(err)
 	}
 	return res, err
 }

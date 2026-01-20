@@ -17,6 +17,7 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/panjf2000/ants/v2"
 	"github.com/robfig/cron/v3"
+	"github.com/samber/do/v2"
 	"github.com/spf13/viper"
 	swagfiles "github.com/swaggo/files"
 	ginswag "github.com/swaggo/gin-swagger"
@@ -47,11 +48,18 @@ type Engine struct {
 	/* RunOption */
 	basePath string // 路由基础路径
 
+	rootScope *do.RootScope
+
 	controllersMu      sync.RWMutex
 	controllerRegistry []ControllerProvider
 
 	httpServer *http.Server
 	plugins    *PluginManager
+}
+
+// Injector 依赖注入器
+func (e *Engine) Injector() *do.RootScope {
+	return e.rootScope
 }
 
 // Run 运行应用
