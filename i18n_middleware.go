@@ -21,31 +21,17 @@ func i18nMiddleware(e *Engine) gin.HandlerFunc {
 		if langHeaderKey == "" {
 			langHeaderKey = "Accept-Language"
 		}
-		langCookieKey := cfg.GetString("i18n.lang_cookie")
-		if langCookieKey == "" {
-			langCookieKey = "lang"
-		}
 		defaultLang := cfg.GetString("i18n.default_language")
-		fallbacks := cfg.GetStringSlice("i18n.fallback_languages")
 
 		var candidates []string
 		if qv := strings.TrimSpace(ctx.Query(langQueryKey)); qv != "" {
 			candidates = append(candidates, qv)
-		}
-		if cv, err := ctx.Cookie(langCookieKey); err == nil {
-			cv = strings.TrimSpace(cv)
-			if cv != "" {
-				candidates = append(candidates, cv)
-			}
 		}
 		if hv := strings.TrimSpace(ctx.GetHeader(langHeaderKey)); hv != "" {
 			candidates = append(candidates, hv)
 		}
 		if defaultLang != "" {
 			candidates = append(candidates, defaultLang)
-		}
-		if len(fallbacks) > 0 {
-			candidates = append(candidates, fallbacks...)
 		}
 
 		localizer := i18n.NewLocalizer(e.i18nBundle, candidates...)
@@ -54,54 +40,25 @@ func i18nMiddleware(e *Engine) gin.HandlerFunc {
 	}
 }
 
-// GetLocalizer 从 gin.Context 中获取 Localizer
-func GetLocalizer(ctx *gin.Context) (*i18n.Localizer, bool) {
+// Localizer 从 gin.Context 中获取 Localizer
+func Localizer(ctx *gin.Context) *i18n.Localizer {
 	v, ok := ctx.Get(contextKeyI18nLocalizer)
 	if !ok {
-		return nil, false
+		return nil
 	}
 	loc, ok := v.(*i18n.Localizer)
-	return loc, ok
+	return loc
 }
 
-// T 根据消息 ID 获取翻译文本
-//
-// 参数说明：
-//   - ctx: 请求上下文，用于获取注入的 Localizer
-//   - id: 消息 ID（定义于 YAML 消息文件）
-//   - args: 可选参数，最多两个；用于模板数据与复数计数
-//
-// 行为说明：
-//   - 未获取到 Localizer 或翻译失败时，回退返回消息 ID
-//   - 超过两个的参数会被忽略，仅取前两项
-//
-// 使用示例：
-//   - T(ctx, "user.welcome")
-//   - T(ctx, "user.info", gin.H{"Name": name})
-//   - T(ctx, "cart.items", nil, n)
-func T(ctx *gin.Context, id string, args ...any) string {
-	cfg := &i18n.LocalizeConfig{MessageID: id}
-
-	if len(args) > 0 {
-		cfg.TemplateData = args[0]
+// Localize 根据 LocalizeConfig 获取翻译文本
+func Localize(ctx *gin.Context, config *i18n.LocalizeConfig) string {
+	localizer := Localizer(ctx)
+	if localizer == nil {
+		return config.MessageID
 	}
-
-	if len(args) > 1 {
-		cfg.PluralCount = args[1]
-	}
-
-	return TWithConfig(ctx, cfg)
-}
-
-// TWithConfig 根据 LocalizeConfig 获取翻译文本
-func TWithConfig(ctx *gin.Context, cfg *i18n.LocalizeConfig) string {
-	loc, ok := GetLocalizer(ctx)
-	if !ok || loc == nil {
-		return cfg.MessageID
-	}
-	msg, err := loc.Localize(cfg)
+	msg, err := localizer.Localize(config)
 	if err != nil || msg == "" {
-		return cfg.MessageID
+		return config.MessageID
 	}
 	return msg
 }
