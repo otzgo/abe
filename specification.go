@@ -1,6 +1,7 @@
 package abe
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -68,6 +69,35 @@ type UseCase[T any] interface {
 	//   - error: 处理过程中的错误
 	Handle(ctx *gin.Context) (T, error)
 }
+
+var (
+	ErrUnauthorized   = errors.New("unauthorized")          // 未认证
+	ErrForbidden      = errors.New("forbidden")             // 无权限
+	ErrInternalServer = errors.New("internal server error") // 内部错误
+)
+
+// ErrorCode 业务错误码
+// 用于表示业务逻辑中的错误码，0 表示成功，非 0 表示具体错误
+type ErrorCode int
+
+// Response 定义了统一的响应结构
+type Response[T any] struct {
+	Code ErrorCode `json:"code"`
+	Msg  string    `json:"msg"`
+	Data T         `json:"data,omitempty"`
+}
+
+// ErrorResponse 定义了统一的错误响应结构
+type ErrorResponse = Response[gin.H]
+
+// ErrorHandler 错误处理函数
+// 参数:
+//   - err: error，要处理的错误
+//
+// 返回:
+//   - *ErrorResponse: 自定义错误响应
+//   - int: HTTP 状态码
+type ErrorHandler func(err error) (*ErrorResponse, int)
 
 // EncodeUserSub 编码用户主体为 Casbin 格式
 // - 用户：user:<userID>

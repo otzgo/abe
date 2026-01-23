@@ -41,8 +41,8 @@ func validationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
 	}
 }
 
-// GetTranslator 从上下文获取翻译器
-func GetTranslator(c *gin.Context) ut.Translator {
+// Translator 从上下文获取翻译器
+func Translator(c *gin.Context) ut.Translator {
 	v, ok := c.Get(translatorContextKey)
 	if !ok {
 		return nil

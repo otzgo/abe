@@ -146,7 +146,7 @@ func (am *AuthManager) AuthenticationMiddleware() gin.HandlerFunc {
 			case errors.Is(err, ErrInvalidToken), errors.Is(err, ErrInvalidSigningKey):
 				ctx.Error(fmt.Errorf("无效令牌: %w", ErrUnauthorized))
 			default:
-				ctx.Error(fmt.Errorf("认证处理失败: %w", ErrInternalServerError))
+				ctx.Error(fmt.Errorf("认证处理失败: %w", ErrInternalServer))
 			}
 			ctx.Abort()
 			return

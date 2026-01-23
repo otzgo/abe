@@ -50,6 +50,8 @@ type Engine struct {
 
 	rootScope *do.RootScope
 
+	errorHandlers []ErrorHandler
+
 	controllersMu      sync.RWMutex
 	controllerRegistry []ControllerProvider
 
@@ -155,6 +157,11 @@ func (e *Engine) Auth() *AuthManager {
 // DynamicConfig 动态配置管理器
 func (e *Engine) DynamicConfig() *DynamicConfigManager {
 	return e.dynamicConfig
+}
+
+// AddErrorHandler 为 errorHandlers 追加错误处理器
+func (e *Engine) AddErrorHandler(handler ErrorHandler) {
+	e.errorHandlers = append(e.errorHandlers, handler)
 }
 
 // AddController 批量追加控制器提供者
