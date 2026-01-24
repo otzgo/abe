@@ -109,7 +109,7 @@ func (pm *PluginManager) Register(p Plugin) error {
 
 	// 重复插件（按唯一键）直接拒绝
 	if _, ok := pm.index[key]; ok {
-		return ErrDuplicatePlugin(key)
+		return errDuplicatePlugin(key)
 	}
 
 	// 兼容性校验：若插件声明 MinEngineVersion 且当前 abe 版本不满足
@@ -148,7 +148,7 @@ func (pm *PluginManager) Register(p Plugin) error {
 	if alias == "" && hasConflict {
 		if mode == "error" {
 			pm.engine.Logger().Error("插件名称冲突，拒绝注册", "name", name, "unique_key", key, "conflict_with", conflictKeys, "hint", "设置 plugins.conflict_mode=alias 或配置 plugins.aliases.<key> 指定别名")
-			return ErrDuplicatePlugin(name)
+			return errDuplicatePlugin(name)
 		}
 		// alias 模式：生成稳定别名并 WARN
 		alias = pm.generateAlias(name, key)
@@ -198,8 +198,38 @@ func (pm *PluginManager) List() []Plugin {
 	return cp
 }
 
-// OnBeforeMount 触发所有实现 BeforeMountHook 的插件
-func (pm *PluginManager) OnBeforeMount() {
+// ResolveDisplayName 返回插件的展示名（通过实例计算唯一键）
+func (pm *PluginManager) ResolveDisplayName(p Plugin) string {
+	t := reflect.TypeOf(p)
+	key := t.PkgPath() + "." + t.Name()
+	return pm.resolveDisplayNameByKey(key)
+}
+
+// LookupByKey 按唯一键查找插件
+func (pm *PluginManager) LookupByKey(key string) (Plugin, bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	p, ok := pm.index[key]
+	return p, ok
+}
+
+// LookupByAliasOrName 先按别名，再按名称查找插件
+// 若名称对应多个插件，则返回 false（避免歧义）
+func (pm *PluginManager) LookupByAliasOrName(s string) (Plugin, bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if key, ok := pm.aliasIndex[s]; ok {
+		return pm.index[key], true
+	}
+	keys := pm.nameIndex[s]
+	if len(keys) == 1 {
+		return pm.index[keys[0]], true
+	}
+	return nil, false
+}
+
+// onBeforeMount 触发所有实现 BeforeMountHook 的插件
+func (pm *PluginManager) onBeforeMount() {
 	pm.mu.RLock()
 	plugins := append([]Plugin(nil), pm.plugins...)
 	pm.mu.RUnlock()
@@ -236,8 +266,8 @@ func (pm *PluginManager) OnBeforeMount() {
 	}
 }
 
-// OnAfterMount 触发所有实现 AfterMountHook 的插件
-func (pm *PluginManager) OnAfterMount() {
+// onAfterMount 触发所有实现 AfterMountHook 的插件
+func (pm *PluginManager) onAfterMount() {
 	pm.mu.RLock()
 	plugins := append([]Plugin(nil), pm.plugins...)
 	pm.mu.RUnlock()
@@ -274,8 +304,8 @@ func (pm *PluginManager) OnAfterMount() {
 	}
 }
 
-// OnBeforeServerStart 触发所有实现 BeforeServerStartHook 的插件
-func (pm *PluginManager) OnBeforeServerStart() {
+// onBeforeServerStart 触发所有实现 BeforeServerStartHook 的插件
+func (pm *PluginManager) onBeforeServerStart() {
 	pm.mu.RLock()
 	plugins := append([]Plugin(nil), pm.plugins...)
 	pm.mu.RUnlock()
@@ -312,8 +342,8 @@ func (pm *PluginManager) OnBeforeServerStart() {
 	}
 }
 
-// OnShutdown 触发所有实现 ShutdownHook 的插件
-func (pm *PluginManager) OnShutdown() {
+// onShutdown 触发所有实现 ShutdownHook 的插件
+func (pm *PluginManager) onShutdown() {
 	pm.mu.RLock()
 	plugins := append([]Plugin(nil), pm.plugins...)
 	pm.mu.RUnlock()
@@ -344,13 +374,13 @@ func (pm *PluginManager) OnShutdown() {
 	}
 }
 
-// ErrDuplicatePlugin 构造重复插件错误
-func ErrDuplicatePlugin(name string) error {
+// errDuplicatePlugin 构造重复插件错误
+func errDuplicatePlugin(name string) error {
 	return errors.New("duplicate plugin: " + name)
 }
 
-// ResolveDisplayNameByKey 返回插件的对外展示名（优先别名，其次作者名）
-func (pm *PluginManager) ResolveDisplayNameByKey(key string) string {
+// resolveDisplayNameByKey 返回插件的对外展示名（优先别名，其次作者名）
+func (pm *PluginManager) resolveDisplayNameByKey(key string) string {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if a, ok := pm.alias[key]; ok && a != "" {
@@ -360,36 +390,6 @@ func (pm *PluginManager) ResolveDisplayNameByKey(key string) string {
 		return p.Name()
 	}
 	return ""
-}
-
-// ResolveDisplayName 返回插件的展示名（通过实例计算唯一键）
-func (pm *PluginManager) ResolveDisplayName(p Plugin) string {
-	t := reflect.TypeOf(p)
-	key := t.PkgPath() + "." + t.Name()
-	return pm.ResolveDisplayNameByKey(key)
-}
-
-// LookupByKey 按唯一键查找插件
-func (pm *PluginManager) LookupByKey(key string) (Plugin, bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	p, ok := pm.index[key]
-	return p, ok
-}
-
-// LookupByAliasOrName 先按别名，再按名称查找插件
-// 若名称对应多个插件，则返回 false（避免歧义）
-func (pm *PluginManager) LookupByAliasOrName(s string) (Plugin, bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	if key, ok := pm.aliasIndex[s]; ok {
-		return pm.index[key], true
-	}
-	keys := pm.nameIndex[s]
-	if len(keys) == 1 {
-		return pm.index[keys[0]], true
-	}
-	return nil, false
 }
 
 // generateAlias 基于名称与唯一键的来源生成稳定别名

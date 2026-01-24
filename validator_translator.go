@@ -18,7 +18,7 @@ func validationTranslatorMiddleware(e *Engine) gin.HandlerFunc {
 
 	// 获取验证器
 	validate := e.validator.Instance()
-	defaultLocale := e.validator.DefaultLocale()
+	defaultLocale := e.validator.Locale()
 
 	// 初始化多语言
 	zhCn := zh.New()

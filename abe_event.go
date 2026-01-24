@@ -54,7 +54,7 @@ func (m *EventMessage) UUID() string {
 type EventBus interface {
 	Publish(topic string, messages ...*EventMessage) error
 	Subscribe(ctx context.Context, topic string) (<-chan *EventMessage, error)
-	Close() error
+	close() error
 }
 
 // goChannelBus 基于 Watermill GoChannel 的进程内事件总线实现。

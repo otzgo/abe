@@ -76,11 +76,11 @@ func (e *Engine) Run(opts ...RunOption) {
 
 	e.doPackage()
 
-	e.Plugins().OnBeforeMount()
+	e.Plugins().onBeforeMount()
 	e.mountControllers(e.basePath)
-	e.Plugins().OnAfterMount()
+	e.Plugins().onAfterMount()
 	e.initializeHTTPServer()
-	e.Plugins().OnBeforeServerStart()
+	e.Plugins().onBeforeServerStart()
 
 	go e.startHTTPServer()
 
@@ -276,7 +276,7 @@ func (e *Engine) closeEventBus() {
 		return
 	}
 
-	if err := e.events.Close(); err != nil {
+	if err := e.events.close(); err != nil {
 		if e.logger != nil {
 			e.logger.Error("事件总线关闭失败", "error", err)
 		} else {
@@ -293,7 +293,7 @@ func (e *Engine) releasePool() {
 }
 
 func (e *Engine) shutdown() {
-	e.Plugins().OnShutdown()
+	e.Plugins().onShutdown()
 	e.shutdownCron()
 	e.shutdownHTTPServer()
 	e.closeEventBus()

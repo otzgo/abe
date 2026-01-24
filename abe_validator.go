@@ -45,11 +45,6 @@ func (r *ValidationRule) WithEnTranslation(template string) *ValidationRule {
 	return r.WithTranslation("en", template)
 }
 
-// Tag 获取规则标签（只读）
-func (r *ValidationRule) Tag() string {
-	return r.tag
-}
-
 // hasParam 内部方法：检测是否需要参数（自动识别模板中的 {1}）
 func (r *ValidationRule) hasParam() bool {
 	for _, tmpl := range r.translations {
@@ -72,8 +67,8 @@ func (r *ValidationRule) getTranslation(locale string) string {
 	return ""
 }
 
-// validate 内部方法：验证规则完整性
-func (r *ValidationRule) validate() error {
+// check 内部方法：验证规则完整性
+func (r *ValidationRule) check() error {
 	if r.tag == "" {
 		return errors.New("rule tag cannot be empty")
 	}
@@ -91,9 +86,9 @@ func (r *ValidationRule) validate() error {
 
 // Validator 验证器管理器，负责管理验证规则、翻译和配置
 type Validator struct {
-	instance      *validator.Validate
-	customRules   map[string]*ValidationRule // 自定义规则集合
-	defaultLocale string
+	instance    *validator.Validate
+	customRules map[string]*ValidationRule // 自定义规则集合
+	locale      string
 }
 
 // newValidator 创建并初始化验证器实例
@@ -113,7 +108,7 @@ func newValidator(config *viper.Viper) *Validator {
 		defaultLocale = "zh"
 	}
 
-	// 将验证标签从 binding 改为 validate，提升语义清晰度
+	// 将验证标签从 binding 改为 check，提升语义清晰度
 	gv.SetTagName("validate")
 
 	// 字段标签名函数：label > json > 字段名
@@ -137,9 +132,9 @@ func newValidator(config *viper.Viper) *Validator {
 	// 注册 abe 内置通用规则将在返回 Validator 对象后批量注册
 
 	v := &Validator{
-		instance:      gv,
-		defaultLocale: defaultLocale,
-		customRules:   make(map[string]*ValidationRule),
+		instance:    gv,
+		locale:      defaultLocale,
+		customRules: make(map[string]*ValidationRule),
 	}
 
 	// 批量注册内置规则（使用 Must 版本，初始化失败则 panic）
@@ -155,15 +150,15 @@ func (v *Validator) Instance() *validator.Validate {
 	return v.instance
 }
 
-// DefaultLocale 返回默认语言
-func (v *Validator) DefaultLocale() string {
-	return v.defaultLocale
+// Locale 返回默认语言
+func (v *Validator) Locale() string {
+	return v.locale
 }
 
 // RegisterCustomRule 注册自定义验证规则
 func (v *Validator) RegisterCustomRule(rule *ValidationRule) error {
 	// 验证规则完整性
-	if err := rule.validate(); err != nil {
+	if err := rule.check(); err != nil {
 		return err
 	}
 
@@ -320,28 +315,28 @@ func validateStrongPassword(fl validator.FieldLevel) bool {
 var (
 	// BuiltinRuleMobile 手机号验证规则
 	BuiltinRuleMobile = NewValidationRule("mobile", validateMobile).
-		WithZhTranslation("{0}必须是有效的手机号码").
-		WithEnTranslation("{0} must be a valid mobile number")
+				WithZhTranslation("{0}必须是有效的手机号码").
+				WithEnTranslation("{0} must be a valid mobile number")
 
 	// BuiltinRuleIDCard 身份证号验证规则
 	BuiltinRuleIDCard = NewValidationRule("idcard", validateIDCard).
-		WithZhTranslation("{0}必须是有效的身份证号码").
-		WithEnTranslation("{0} must be a valid ID card number")
+				WithZhTranslation("{0}必须是有效的身份证号码").
+				WithEnTranslation("{0} must be a valid ID card number")
 
 	// BuiltinRuleUsername 用户名验证规则
 	BuiltinRuleUsername = NewValidationRule("username", validateUsername).
-		WithZhTranslation("{0}必须是3-20位字母数字下划线").
-		WithEnTranslation("{0} must be 3-20 alphanumeric characters or underscore")
+				WithZhTranslation("{0}必须是3-20位字母数字下划线").
+				WithEnTranslation("{0} must be 3-20 alphanumeric characters or underscore")
 
 	// BuiltinRuleChineseName 中文姓名验证规则
 	BuiltinRuleChineseName = NewValidationRule("chinese_name", validateChineseName).
-		WithZhTranslation("{0}必须是2-20个中文字符").
-		WithEnTranslation("{0} must be 2-20 Chinese characters")
+				WithZhTranslation("{0}必须是2-20个中文字符").
+				WithEnTranslation("{0} must be 2-20 Chinese characters")
 
 	// BuiltinRuleStrongPassword 强密码验证规则
 	BuiltinRuleStrongPassword = NewValidationRule("strong_password", validateStrongPassword).
-		WithZhTranslation("{0}必须至少8位，且包含大小写字母和数字").
-		WithEnTranslation("{0} must be at least 8 characters with uppercase, lowercase and digits")
+					WithZhTranslation("{0}必须至少8位，且包含大小写字母和数字").
+					WithEnTranslation("{0} must be at least 8 characters with uppercase, lowercase and digits")
 )
 
 // builtinRules 返回所有内置规则
