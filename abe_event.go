@@ -123,8 +123,8 @@ func (b *goChannelBus) Subscribe(ctx context.Context, topic string) (<-chan *Eve
 	return msgCh, nil
 }
 
-// Close 关闭底层 Pub/Sub。
-func (b *goChannelBus) Close() error {
+// close 关闭底层 Pub/Sub。
+func (b *goChannelBus) close() error {
 	return b.ps.Close()
 }
 

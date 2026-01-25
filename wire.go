@@ -7,7 +7,7 @@ import (
 	"github.com/google/wire"
 )
 
-// InitializeEngine 初始化并返回 abe 框架的应用引擎实例
+// NewEngine 初始化并返回 abe 框架的应用引擎实例
 //
 // 此函数是 abe 框架的入口函数，负责创建和组装所有核心组件，包括：
 //   - 配置系统（支持命令行参数、环境变量、配置文件）
@@ -24,16 +24,16 @@ import (
 // 使用示例：
 //
 //	func main() {
-//	    engine := abe.InitializeEngine()
+//	    engine := abe.NewEngine()
 //	    // 配置路由、定时任务等
 //	    engine.Run()  // 启动 HTTP 服务器和定时任务调度器
 //	}
-func InitializeEngine() *Engine {
+func NewEngine() *Engine {
 	wire.Build(
 		wire.Struct(
 			new(Engine),
 			"config", "router", "db", "cron", "events", "pool", "logger", "enforcer", "validator", "middlewareManager",
-			"i18nBundle", "authManager", "dynamicConfig", "rootScope",
+			"i18nBundle", "rootScope",
 		),
 		newCron,
 		newConfig,
@@ -48,8 +48,6 @@ func InitializeEngine() *Engine {
 		newValidator,
 		newMiddlewareManager,
 		newI18nBundle,
-		newAuthManager,
-		newDynamicConfigManager,
 		wire.Bind(new(EventBus), new(*goChannelBus)),
 		newRootScope,
 	)

@@ -2,7 +2,6 @@ package abe
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -98,12 +97,3 @@ type ErrorResponse = Response[gin.H]
 //   - *ErrorResponse: 自定义错误响应
 //   - int: HTTP 状态码
 type ErrorHandler func(err error) (*ErrorResponse, int)
-
-// EncodeUserSub 编码用户主体为 Casbin 格式
-// - 用户：user:<userID>
-func EncodeUserSub(userID string) string { return "user:" + userID }
-
-// EncodeRoleSub 编码角色主体为 Casbin 格式
-// - 角色：role:<role_id>
-// 参数 roleID 为角色的数据库ID（uint），使用ID而非名称确保角色改名时权限规则不失效
-func EncodeRoleSub(roleID uint) string { return "role:" + strconv.FormatUint(uint64(roleID), 10) }

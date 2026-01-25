@@ -42,8 +42,6 @@ type Engine struct {
 	validator         *Validator
 	middlewareManager *MiddlewareManager
 	i18nBundle        *i18n.Bundle
-	authManager       *AuthManager
-	dynamicConfig     *DynamicConfigManager // 动态配置管理器
 
 	/* RunOption */
 	basePath string // 路由基础路径
@@ -69,10 +67,6 @@ func (e *Engine) Run(opts ...RunOption) {
 	for _, opt := range opts {
 		opt(e)
 	}
-
-	/* TODO 系统配置待完善 */
-	_ = e.DB().AutoMigrate(&SystemConfig{})
-	_ = e.DynamicConfig().LoadAll()
 
 	e.doPackage()
 
@@ -147,16 +141,6 @@ func (e *Engine) Plugins() *PluginManager {
 		e.plugins = newPluginManager(e)
 	}
 	return e.plugins
-}
-
-// Auth 认证授权管理器
-func (e *Engine) Auth() *AuthManager {
-	return e.authManager
-}
-
-// DynamicConfig 动态配置管理器
-func (e *Engine) DynamicConfig() *DynamicConfigManager {
-	return e.dynamicConfig
 }
 
 // AddErrorHandler 为 errorHandlers 追加错误处理器

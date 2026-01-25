@@ -36,20 +36,20 @@ func getPoolConfigFromViper(v *viper.Viper) PoolConfig {
 
 	// 如果配置中有协程池设置，则使用配置中的设置
 	if v != nil {
-		if size := v.GetInt("goroutine_pool.size"); size > 0 {
+		if size := v.GetInt("pool.size"); size > 0 {
 			poolConfig.Size = size
 		}
-		if expiryDuration := v.GetInt("goroutine_pool.expiry_duration"); expiryDuration > 0 {
+		if expiryDuration := v.GetInt("pool.expiry_duration"); expiryDuration > 0 {
 			poolConfig.ExpiryDuration = time.Duration(expiryDuration) * time.Second
 		}
-		if v.IsSet("goroutine_pool.pre_alloc") {
-			poolConfig.PreAlloc = v.GetBool("goroutine_pool.pre_alloc")
+		if v.IsSet("pool.pre_alloc") {
+			poolConfig.PreAlloc = v.GetBool("pool.pre_alloc")
 		}
-		if maxBlockingTasks := v.GetInt("goroutine_pool.max_blocking_tasks"); maxBlockingTasks > 0 {
+		if maxBlockingTasks := v.GetInt("pool.max_blocking_tasks"); maxBlockingTasks > 0 {
 			poolConfig.MaxBlockingTasks = maxBlockingTasks
 		}
-		if v.IsSet("goroutine_pool.nonblocking") {
-			poolConfig.Nonblocking = v.GetBool("goroutine_pool.nonblocking")
+		if v.IsSet("pool.nonblocking") {
+			poolConfig.Nonblocking = v.GetBool("pool.nonblocking")
 		}
 	}
 
@@ -107,7 +107,7 @@ func initializePool(config PoolConfig, logger *slog.Logger) (*ants.Pool, error) 
 		ants.WithNonblocking(config.Nonblocking),
 		ants.WithLogger(logAdapter),
 		ants.WithPanicHandler(func(i any) {
-			logger.Error("协程池任务发生panic", "error", i)
+			logger.Error("协程池任务发生 panic", "error", i)
 		}),
 	}
 
@@ -146,7 +146,7 @@ func newPoolWithFunc(fn func(any), size int, logger *slog.Logger) (*ants.PoolWit
 		ants.WithNonblocking(cfg.Nonblocking),
 		ants.WithLogger(logAdapter),
 		ants.WithPanicHandler(func(i any) {
-			logger.Error("函数协程池任务发生panic", "error", i)
+			logger.Error("函数协程池任务发生 panic", "error", i)
 		}),
 	}
 
